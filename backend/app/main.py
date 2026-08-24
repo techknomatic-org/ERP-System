@@ -1,0 +1,82 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.config import settings
+from app.api import (
+    dashboard, inventory, sales, customers, system, auth, 
+    notifications, approvals, audit, documents,
+    properties, buildings, units, crm_leads, bookings, payments, portal,
+    projects, wbs, site_logs,
+    vendors, boq_mb, contractor_billing,
+    hse, quality, facility, tally, ai_analytics
+)
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version=settings.VERSION,
+    description="FastAPI Backend for Enterprise Real Estate & Construction ERP System"
+)
+
+# Enable CORS for React Frontend on Localhost
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Core Routers
+app.include_router(system.router)
+app.include_router(auth.router)
+app.include_router(dashboard.router)
+app.include_router(inventory.router)
+app.include_router(sales.router)
+app.include_router(customers.router)
+app.include_router(notifications.router)
+app.include_router(approvals.router)
+app.include_router(audit.router)
+app.include_router(documents.router)
+
+# Phase 2 Routers
+app.include_router(properties.router)
+app.include_router(buildings.router)
+app.include_router(units.router)
+app.include_router(crm_leads.router)
+app.include_router(bookings.router)
+app.include_router(payments.router)
+app.include_router(portal.router)
+
+# Phase 3 Routers
+app.include_router(projects.router)
+app.include_router(wbs.router)
+app.include_router(site_logs.router)
+
+# Phase 4 Routers
+app.include_router(vendors.router)
+app.include_router(boq_mb.router)
+app.include_router(contractor_billing.router)
+
+# Phase 5 Routers
+app.include_router(hse.router)
+app.include_router(quality.router)
+
+# Phase 6 Router
+app.include_router(facility.router)
+
+# Phase 7 Router
+app.include_router(tally.router)
+
+# Phase 8 Router
+app.include_router(ai_analytics.router)
+
+@app.get("/")
+def root():
+    return {
+        "message": f"Welcome to {settings.PROJECT_NAME} API",
+        "docs_url": "/docs",
+        "status": "active"
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host=settings.HOST, port=settings.PORT, reload=True)
