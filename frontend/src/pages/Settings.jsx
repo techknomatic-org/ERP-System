@@ -222,7 +222,7 @@ export default function Settings() {
             <div style={{ padding: '0.85rem', background: 'rgba(15,23,42,0.6)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
               <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#818cf8', marginBottom: '0.2rem' }}>Backend REST API</div>
               <div style={{ fontSize: '0.8rem', color: '#f8fafc' }}>Python + FastAPI + SQLAlchemy ORM</div>
-              <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>Host: http://127.0.0.1:8000</div>
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>Host: {import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api'}</div>
             </div>
 
             <div style={{ padding: '0.85rem', background: 'rgba(15,23,42,0.6)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
