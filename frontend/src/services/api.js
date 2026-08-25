@@ -177,10 +177,12 @@ export const vendorService = {
 
 export const procurementService = {
   getKpis: () => api.get('/procurement/kpis'),
+  getActiveVendors: () => api.get('/procurement/active-vendors'),
   getMaterialRequests: (status = null) => api.get('/procurement/material-requests', { params: { status } }),
   getApprovedMprs: () => api.get('/procurement/approved-mprs'),
   createMaterialRequest: (data) => api.post('/procurement/material-requests', data),
   processMprPmAction: (mprId, action, comments) => api.post(`/procurement/material-requests/${mprId}/pm-action`, { action, comments }),
+  createLowStockMpr: (productId) => api.post(`/procurement/create-low-stock-mpr/${productId}`),
   getPrs: () => api.get('/procurement/pr'),
   getApprovedPrs: () => api.get('/procurement/approved-prs'),
   createPr: (data) => api.post('/procurement/pr', data),
@@ -189,6 +191,7 @@ export const procurementService = {
   getDeliveries: () => api.get('/procurement/deliveries'),
   recordDelivery: (data) => api.post('/procurement/deliveries', data),
   getHistory: () => api.get('/procurement/history'),
+  getTraceabilityChain: () => api.get('/procurement/traceability'),
 };
 
 export const boqMbService = {
@@ -258,11 +261,11 @@ export const aiService = {
   uploadInvoiceOcr: (formData) => api.post('/ai/ocr/upload-invoice', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
-  verifyAndMatchOcr: (formData) => api.post('/ai/ocr/verify-and-match', formData),
-  submitOcrFinancialRequest: (formData) => api.post('/ai/ocr/submit-financial-request', formData),
+  verifyAndMatchOcr: (data) => api.post('/ai/ocr/verify-and-match', data),
+  submitOcrFinancialRequest: (data) => api.post('/ai/ocr/submit-financial-request', data),
   queryChat: (prompt, role = null) => {
     const headers = role ? { 'X-User-Role': role } : {};
-    return api.post('/ai/chat', { message: prompt }, { headers });
+    return api.post('/ai/chat', { message: prompt }, { headers, timeout: 10000 });
   },
 };
 

@@ -1,60 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { 
-  LayoutDashboard, Package, ShoppingCart, Users, Settings, Database, 
-  CheckSquare, ShieldAlert, Building2, HardHat, FileText, Wrench, UserCheck, Key, Layers, ClipboardList,
-  Calculator, Truck, FileSpreadsheet, ShieldCheck, AlertOctagon, LifeBuoy, FileCode, Sparkles,
-  ChevronDown, ChevronRight, ChevronLeft, UserCog, Sliders, Activity, Briefcase, FileBarChart, Shield, DollarSign, TrendingUp
+  LayoutDashboard, Package, ShoppingCart, Users, Settings, 
+  CheckSquare, ShieldAlert, Building2, HardHat, FileText, UserCheck, Key, Layers, ClipboardList,
+  Calculator, Truck, FileSpreadsheet, ShieldCheck, AlertOctagon, Sparkles, Wrench,
+  ChevronDown, ChevronRight, ChevronLeft, UserCog, Sliders, Activity, FileBarChart, DollarSign, TrendingUp, Briefcase
 } from 'lucide-react';
 import { approvalService } from '../services/api';
 
-const ROLE_PERMITTED_PATHS = {
-  admin: ["*"],
-  management: ["*"],
-  project_manager: ["/", "/projects", "/wbs", "/site-logs", "/boq-mb", "/approvals", "/procurement", "/financial-requests"],
-  site_engineer: ["/", "/projects", "/wbs", "/site-logs", "/boq-mb", "/procurement", "/inventory", "/hse", "/approvals", "/ai-analytics", "/financial-requests"],
-  finance: ["/", "/bookings", "/financial-requests", "/approvals"],
-  procurement: ["/procurement", "/vendors", "/boq-mb", "/inventory", "/approvals", "/financial-requests"],
-  hse: ["/hse", "/quality", "/approvals"],
-  qc: ["/quality", "/hse", "/approvals"],
-  facility_manager: ["/facility", "/inventory", "/approvals"],
-  customer: ["/portal"]
-};
+import { ROLE_PERMITTED_ROUTES as ROLE_PERMITTED_PATHS } from '../config/roles';
 
 export default function Sidebar() {
   const [pendingCount, setPendingCount] = useState(0);
   const [userRole, setUserRole] = useState(localStorage.getItem('erp_role') || 'admin');
-
-  // Sidebar Width Collapse State
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Group Accordion State
   const [openGroups, setOpenGroups] = useState({
-    admin: true,
-    master: false,
-    ops: false,
-    finance: false,
-    procurement: false,
-    quality: false,
-    analytics: false,
-    integrations: false,
-
-    // PM Groups
-    pm_projects: true,
-    pm_planning: true,
-    pm_materials: false,
-    pm_approvals: true,
-
-    // SE Groups
-    se_dashboard: true,
-    se_execution: true,
-    se_materials: false,
-    se_control: true,
-    se_reports: false,
-
-    // Finance Groups (Default Open)
-    fin_dashboard: true,
-    fin_receivables: true
+    admin: true, master: false, ops: true, finance: true, procurement: true, quality: false, analytics: false,
+    pm_projects: true, pm_planning: true, pm_materials: false, pm_approvals: true,
+    se_dashboard: true, se_execution: true, se_materials: false, se_control: true,
+    fin_dashboard: true, fin_receivables: true,
+    proc_dashboard: true, proc_pipeline: true,
+    mgmt_dashboard: true, mgmt_portfolio: true
   });
 
   const toggleGroup = (key) => {
@@ -82,27 +49,26 @@ export default function Sidebar() {
     return allowed.some(a => path === a || path.startsWith(a));
   };
 
-  // SYSTEM ADMIN Navigation
+  // 1. SYSTEM ADMIN Nav (System & Security Administration)
   const adminNavSections = [
     {
       key: 'admin',
       title: 'SYSTEM ADMINISTRATION',
       items: [
-        { label: 'Admin Dashboard', icon: LayoutDashboard, path: '/' },
+        { label: 'Admin Overview', icon: LayoutDashboard, path: '/' },
         { label: 'User Accounts', icon: UserCheck, path: '/users' },
         { label: 'Roles & Permissions', icon: UserCog, path: '/roles-permissions' },
         { label: 'Approval Authority', icon: Sliders, path: '/approval-authority' },
         { label: 'Audit Trail Logs', icon: ShieldAlert, path: '/audit-logs' },
-        { label: 'Session Management', icon: Activity, path: '/sessions' },
         { label: 'System Settings', icon: Settings, path: '/settings' },
       ]
     },
     {
       key: 'master',
-      title: 'MASTER DATA',
+      title: 'MASTER DATA & ASSETS',
       items: [
         { label: 'Construction Projects', icon: HardHat, path: '/projects' },
-        { label: 'Properties & Complexes', icon: Building2, path: '/properties' },
+        { label: 'Properties Master', icon: Building2, path: '/properties' },
         { label: 'Unit Inventory Master', icon: Key, path: '/units' },
         { label: 'Customers Directory', icon: Users, path: '/customers' },
         { label: 'Vendor Directory', icon: Truck, path: '/vendors' },
@@ -110,17 +76,13 @@ export default function Sidebar() {
     },
     {
       key: 'ops',
-      title: 'BUSINESS OPERATIONS',
+      title: 'CONSTRUCTION OPERATIONS',
       items: [
-        { label: 'Construction Projects', icon: HardHat, path: '/projects' },
-        { label: 'WBS & Gantt Timeline', icon: Layers, path: '/wbs' },
-        { label: 'Site Daily Progress Logs', icon: ClipboardList, path: '/site-logs' },
+        { label: 'WBS & Task Tree', icon: Layers, path: '/wbs' },
+        { label: 'Daily Site Logs', icon: ClipboardList, path: '/site-logs' },
         { label: 'BOQ & Measurement Book', icon: FileSpreadsheet, path: '/boq-mb' },
-        { label: 'Property Management', icon: Building2, path: '/properties' },
-        { label: 'Unit Inventory', icon: Key, path: '/units' },
-        { label: 'CRM Lead Pipeline', icon: UserCheck, path: '/crm-leads' },
+        { label: 'CRM Leads', icon: UserCheck, path: '/crm-leads' },
         { label: 'Unit Bookings', icon: Key, path: '/bookings' },
-        { label: 'Customer Portal', icon: FileText, path: '/portal' },
       ]
     },
     {
@@ -128,171 +90,194 @@ export default function Sidebar() {
       title: 'FINANCE & PAYMENTS',
       items: [
         { label: 'Financial Requests', icon: DollarSign, path: '/financial-requests' },
-        { label: 'Payment Management', icon: Key, path: '/bookings' },
-        { label: 'Payment Schedules', icon: Key, path: '/bookings' },
-        { label: 'Payment Receipts', icon: Key, path: '/bookings' },
+        { label: 'Contractor Billing', icon: Calculator, path: '/contractor-billing' },
+        { label: 'Tally Accounting Sync', icon: FileBarChart, path: '/tally' },
       ]
     },
     {
       key: 'procurement',
       title: 'PROCUREMENT & INVENTORY',
       items: [
-        { label: 'Procurement', icon: ShoppingCart, path: '/procurement' },
-        { label: 'Inventory & Materials', icon: Package, path: '/inventory' },
+        { label: 'Procurement Pipeline', icon: ShoppingCart, path: '/procurement' },
+        { label: 'Material Inventory', icon: Package, path: '/inventory' },
+        { label: 'Vendors Directory', icon: Truck, path: '/vendors' },
       ]
     },
     {
       key: 'quality',
-      title: 'QUALITY & COMPLIANCE',
+      title: 'APPROVALS & COMPLIANCE',
       items: [
         { label: 'Approval Workflows', icon: CheckSquare, path: '/approvals', badge: pendingCount > 0 ? pendingCount : null },
-        { label: 'Financial Requests', icon: DollarSign, path: '/financial-requests' },
-        { label: 'HSE', icon: ShieldCheck, path: '/hse' },
-        { label: 'Quality Control', icon: AlertOctagon, path: '/quality' },
+        { label: 'HSE Safety Incidents', icon: ShieldCheck, path: '/hse' },
+        { label: 'Quality Control Inspections', icon: AlertOctagon, path: '/quality' },
+        { label: 'Facility Management', icon: Wrench, path: '/facility' },
       ]
     },
     {
       key: 'analytics',
-      title: 'REPORTS & ANALYTICS',
+      title: 'EXECUTIVE AI ANALYTICS',
       items: [
-        { label: 'Executive Reports', icon: Sparkles, path: '/ai-analytics' },
-        { label: 'Business Reports', icon: FileBarChart, path: '/ai-analytics' },
-      ]
-    },
-    {
-      key: 'integrations',
-      title: 'INTEGRATIONS & TOOLS',
-      items: [
-        { label: 'Integrations', icon: FileCode, path: '/tally' },
-        { label: 'System Tools', icon: Settings, path: '/settings' },
+        { label: 'AI Analytics & OCR', icon: Sparkles, path: '/ai-analytics' },
       ]
     }
   ];
 
-  // PM Navigation
+  // 2. EXECUTIVE MANAGEMENT Nav (Portfolio Governance & Profitability)
+  const mgmtNavSections = [
+    {
+      key: 'mgmt_dashboard',
+      title: 'EXECUTIVE PORTFOLIO',
+      items: [
+        { label: 'Executive Portfolio Dashboard', icon: LayoutDashboard, path: '/' },
+        { label: 'Portfolio Construction Projects', icon: HardHat, path: '/projects' },
+        { label: 'WBS Milestones & Schedule', icon: Layers, path: '/wbs' }
+      ]
+    },
+    {
+      key: 'mgmt_portfolio',
+      title: 'GOVERNANCE & ANALYTICS',
+      items: [
+        { label: 'Executive Approvals Queue', icon: CheckSquare, path: '/approvals', badge: pendingCount > 0 ? pendingCount : null },
+        { label: 'Financial Requests Overview', icon: DollarSign, path: '/financial-requests' },
+        { label: 'AI Analytics & Predictive Insights', icon: Sparkles, path: '/ai-analytics' }
+      ]
+    }
+  ];
+
+  // 3. PROJECT MANAGER Nav
   const pmNavSections = [
     {
       key: 'pm_projects',
-      title: '🏗️ PROJECTS',
+      title: 'PROJECT MANAGEMENT',
       items: [
-        { label: 'My Projects', icon: HardHat, path: '/projects' }
+        { label: 'PM Dashboard', icon: LayoutDashboard, path: '/' },
+        { label: 'Construction Projects', icon: HardHat, path: '/projects' }
       ]
     },
     {
       key: 'pm_planning',
-      title: '📋 PLANNING & EXECUTION',
+      title: 'PLANNING & EXECUTION',
       items: [
-        { label: 'WBS & Gantt', icon: Layers, path: '/wbs' },
-        { label: 'Project Tasks', icon: Layers, path: '/wbs' },
-        { label: 'Site Daily Logs', icon: ClipboardList, path: '/site-logs' },
-        { label: 'BOQ & Measurements', icon: FileSpreadsheet, path: '/boq-mb' }
+        { label: 'WBS & Task Tree', icon: Layers, path: '/wbs' },
+        { label: 'Daily Site Logs', icon: ClipboardList, path: '/site-logs' },
+        { label: 'BOQ & Measurement Book', icon: FileSpreadsheet, path: '/boq-mb' }
       ]
     },
     {
       key: 'pm_materials',
-      title: '📦 MATERIALS',
+      title: 'RESOURCES & INVENTORY',
       items: [
-        { label: 'Material Inventory', icon: Package, path: '/inventory' }
+        { label: 'Procurement Pipeline', icon: ShoppingCart, path: '/procurement' },
+        { label: 'Material Inventory', icon: Package, path: '/inventory' },
+        { label: 'Vendor Directory', icon: Truck, path: '/vendors' }
       ]
     },
     {
       key: 'pm_approvals',
-      title: '✅ APPROVALS',
+      title: 'WORKFLOW & FINANCIALS',
       items: [
         { label: 'My Pending Approvals', icon: CheckSquare, path: '/approvals', badge: pendingCount > 0 ? pendingCount : null },
-        { label: 'Financial Requests', icon: DollarSign, path: '/financial-requests' }
+        { label: 'Financial Requests', icon: DollarSign, path: '/financial-requests' },
+        { label: 'Executive Analytics', icon: Sparkles, path: '/ai-analytics' }
       ]
     }
   ];
 
-  // SITE ENGINEER Navigation
+  // 4. SITE ENGINEER Nav
   const seNavSections = [
     {
       key: 'se_dashboard',
-      title: '📊 DASHBOARD',
+      title: 'SITE CONTROL',
       items: [
-        { label: 'Site Dashboard', icon: LayoutDashboard, path: '/' }
+        { label: 'Site Engineer Dashboard', icon: LayoutDashboard, path: '/' },
+        { label: 'My Assigned Projects', icon: HardHat, path: '/projects' }
       ]
     },
     {
       key: 'se_execution',
-      title: 'PROJECT EXECUTION',
+      title: 'SITE EXECUTION',
       items: [
-        { label: 'My Sites', icon: HardHat, path: '/projects' },
-        { label: 'WBS & Tasks', icon: Layers, path: '/wbs' },
-        { label: 'Daily Site Logs', icon: ClipboardList, path: '/site-logs' },
-        { label: 'BOQ & Measurements', icon: FileSpreadsheet, path: '/boq-mb' }
+        { label: 'WBS & Task Hierarchy', icon: Layers, path: '/wbs' },
+        { label: 'Daily Site Progress Log', icon: ClipboardList, path: '/site-logs' },
+        { label: 'BOQ & Measurement Book', icon: FileSpreadsheet, path: '/boq-mb' }
       ]
     },
     {
       key: 'se_materials',
-      title: 'MATERIALS & RESOURCES',
+      title: 'MATERIALS & SAFETY',
       items: [
-        { label: 'Material Inventory', icon: Package, path: '/inventory' },
-        { label: 'Material Usage', icon: Package, path: '/inventory' },
-        { label: 'Resources & Manpower', icon: Package, path: '/inventory' }
-      ]
-    },
-    {
-      key: 'se_control',
-      title: 'SITE CONTROL',
-      items: [
-        { label: 'Site Issues & Delays', icon: AlertOctagon, path: '/hse' },
+        { label: 'Material Stock & Requests', icon: Package, path: '/inventory' },
+        { label: 'HSE Safety Incidents', icon: AlertOctagon, path: '/hse' },
         { label: 'Financial Requests', icon: DollarSign, path: '/financial-requests' },
         { label: 'My Pending Approvals', icon: CheckSquare, path: '/approvals', badge: pendingCount > 0 ? pendingCount : null }
-      ]
-    },
-    {
-      key: 'se_reports',
-      title: 'REPORTS',
-      items: [
-        { label: 'Site Progress', icon: Sparkles, path: '/ai-analytics' },
-        { label: 'Material Consumption', icon: Package, path: '/inventory' },
-        { label: 'Delay & Issue Report', icon: ShieldCheck, path: '/hse' }
       ]
     }
   ];
 
-  // EXACT FINANCE SIDEBAR AS REQUESTED
+  // 5. FINANCE Nav
   const financeNavSections = [
     {
       key: 'fin_dashboard',
-      title: '💰 FINANCE',
+      title: 'FINANCIAL MANAGEMENT',
       items: [
         { label: 'Finance Dashboard', icon: LayoutDashboard, path: '/' },
-        { label: 'Financial Requests', icon: DollarSign, path: '/financial-requests' }
+        { label: 'Financial Requests Queue', icon: DollarSign, path: '/financial-requests' },
+        { label: 'Contractor Bill 3-Way Match', icon: Calculator, path: '/contractor-billing' }
       ]
     },
     {
       key: 'fin_receivables',
-      title: '💳 BILLING & RECEIVABLES',
+      title: 'PAYMENTS & ACCOUNTING',
       items: [
-        { label: 'Invoices', icon: FileText, path: '/bookings' },
-        { label: 'Payments & Collections', icon: DollarSign, path: '/bookings' },
-        { label: 'Accounts Receivable', icon: Calculator, path: '/bookings' }
+        { label: 'Approval Tasks Queue', icon: CheckSquare, path: '/approvals', badge: pendingCount > 0 ? pendingCount : null },
+        { label: 'Unit Bookings & Payments', icon: Key, path: '/bookings' },
+        { label: 'AI Invoice OCR & Verification', icon: Sparkles, path: '/ai-analytics' },
+        { label: 'Tally Accounting Sync', icon: FileBarChart, path: '/tally' }
       ]
     }
   ];
 
-  // Customer Sidebar
+  // 6. PROCUREMENT Nav (PR / PO / GRN / Inventory / Vendors)
+  const procurementNavSections = [
+    {
+      key: 'proc_dashboard',
+      title: 'PROCUREMENT HUB',
+      items: [
+        { label: 'Procurement Dashboard', icon: LayoutDashboard, path: '/' },
+        { label: 'Procurement Pipeline (PR/PO/GRN)', icon: ShoppingCart, path: '/procurement' }
+      ]
+    },
+    {
+      key: 'proc_pipeline',
+      title: 'INVENTORY & VENDORS',
+      items: [
+        { label: 'Material Inventory Stock', icon: Package, path: '/inventory' },
+        { label: 'Vendor Directory', icon: Truck, path: '/vendors' },
+        { label: 'BOQ Material Verification', icon: FileSpreadsheet, path: '/boq-mb' },
+        { label: 'Pending Approvals', icon: CheckSquare, path: '/approvals', badge: pendingCount > 0 ? pendingCount : null }
+      ]
+    }
+  ];
+
+  // 7. CUSTOMER PORTAL Sidebar
   if (roleLower === 'customer') {
     return (
-      <aside className="sidebar" style={{ width: '270px' }}>
+      <aside className="sidebar" style={{ width: '260px' }}>
         <div className="brand-header">
           <div className="brand-icon" style={{ background: '#10b981' }}>
             <FileText size={20} color="white" />
           </div>
           <div>
             <div className="brand-name">Customer Portal</div>
-            <div style={{ fontSize: '0.75rem', color: '#10b981' }}>Verified Client Access</div>
+            <div style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 600 }}>Verified Client Access</div>
           </div>
         </div>
-        <nav>
+        <nav style={{ padding: '1rem 0.5rem' }}>
           <ul className="nav-list">
             <li>
               <NavLink to="/portal" className="nav-link active">
                 <FileText size={18} />
-                <span>My Customer Portal</span>
+                <span>My Property Portal</span>
               </NavLink>
             </li>
           </ul>
@@ -302,10 +287,13 @@ export default function Sidebar() {
   }
 
   const activeNavSections = 
+    roleLower === 'management' ? mgmtNavSections :
     roleLower.includes('finance') ? financeNavSections : 
+    roleLower.includes('procure') ? procurementNavSections :
     roleLower.includes('site') ? seNavSections : 
     roleLower.includes('pm') || roleLower.includes('project') ? pmNavSections : adminNavSections;
-  const sidebarWidth = isCollapsed ? '72px' : '270px';
+
+  const sidebarWidth = isCollapsed ? '72px' : '260px';
 
   return (
     <aside
@@ -317,43 +305,56 @@ export default function Sidebar() {
         position: 'relative'
       }}
     >
-      {/* Header */}
-      <div className="brand-header" style={{ justifyContent: isCollapsed ? 'center' : 'space-between', padding: isCollapsed ? '0.75rem 0.5rem' : '1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          <div className="brand-icon" style={{ background: roleLower === 'procurement' ? 'linear-gradient(135deg, #818cf8, #38bdf8)' : roleLower === 'finance' ? 'linear-gradient(135deg, #10b981, #6366f1)' : roleLower === 'site_engineer' ? 'linear-gradient(135deg, #10b981, #06b6d4)' : roleLower === 'project_manager' ? 'linear-gradient(135deg, #f59e0b, #38bdf8)' : undefined }}>
-            {roleLower === 'procurement' ? <ShoppingCart size={20} color="white" /> : roleLower === 'finance' ? <DollarSign size={20} color="white" /> : roleLower === 'site_engineer' ? <HardHat size={20} color="white" /> : roleLower === 'project_manager' ? <HardHat size={20} color="white" /> : <Database size={20} />}
+      {/* Brand Header */}
+      <div className="brand-header" style={{ justifyContent: isCollapsed ? 'center' : 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <div
+            className="brand-icon"
+            style={{
+              background: 'linear-gradient(135deg, #6366f1, #06b6d4)'
+            }}
+          >
+            <Building2 size={20} color="white" />
           </div>
           {!isCollapsed && (
             <div>
               <div className="brand-name">Skyline ERP</div>
-              <div style={{ fontSize: '0.75rem', color: roleLower === 'procurement' ? '#818cf8' : roleLower === 'finance' ? '#10b981' : roleLower === 'site_engineer' ? '#10b981' : roleLower === 'project_manager' ? '#f59e0b' : '#38bdf8', textTransform: 'capitalize', fontWeight: 600 }}>
-                {roleLower === 'procurement' ? '📦 Procurement Officer' : roleLower === 'finance' ? '💰 Finance Lead' : roleLower === 'site_engineer' ? '👷 Site Engineer' : roleLower === 'project_manager' ? '👷 Project Manager' : roleLower === 'admin' ? '🛡️ System Admin' : roleLower.replace('_', ' ')}
+              <div
+                style={{
+                  fontSize: '0.68rem',
+                  color: '#06b6d4',
+                  textTransform: 'uppercase',
+                  fontWeight: 700,
+                  letterSpacing: '0.05em'
+                }}
+              >
+                {roleLower.replace('_', ' ')}
               </div>
             </div>
           )}
         </div>
 
-        {/* Sidebar Width Collapse Button */}
         <button
           type="button"
           onClick={() => setIsCollapsed(!isCollapsed)}
           style={{
-            background: 'rgba(255,255,255,0.08)',
-            border: 'none',
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.08)',
             borderRadius: '6px',
             color: '#94a3b8',
             cursor: 'pointer',
-            padding: '0.3rem',
+            padding: '0.35rem',
             display: 'flex',
             alignItems: 'center',
             justify: 'center'
           }}
           title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
         >
-          {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          {isCollapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
         </button>
       </div>
 
+      {/* Navigation Accordions */}
       <nav style={{ paddingBottom: '2rem' }}>
         <ul className="nav-list">
           {activeNavSections.map(section => {
@@ -363,7 +364,7 @@ export default function Sidebar() {
             const isOpen = openGroups[section.key] === true;
 
             return (
-              <li key={section.key} style={{ marginTop: isCollapsed ? '0.4rem' : '0.75rem' }}>
+              <li key={section.key} style={{ marginTop: isCollapsed ? '0.4rem' : '0.6rem' }}>
                 {!isCollapsed ? (
                   <div
                     onClick={() => toggleGroup(section.key)}
@@ -371,26 +372,26 @@ export default function Sidebar() {
                       display: 'flex',
                       alignItems: 'center',
                       justify: 'space-between',
-                      padding: '0.4rem 0.75rem',
-                      fontSize: '0.72rem',
+                      padding: '0.35rem 0.65rem',
+                      fontSize: '0.68rem',
                       fontWeight: 700,
-                      color: roleLower === 'finance' ? '#10b981' : roleLower === 'site_engineer' ? '#10b981' : roleLower === 'project_manager' ? '#f59e0b' : '#94a3b8',
+                      color: 'var(--text-muted)',
                       textTransform: 'uppercase',
-                      letterSpacing: '0.5px',
+                      letterSpacing: '0.06em',
                       cursor: 'pointer',
                       borderRadius: '4px',
                       userSelect: 'none'
                     }}
                   >
                     <span>{section.title}</span>
-                    {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                   </div>
                 ) : (
-                  <div style={{ height: '1px', background: 'rgba(255,255,255,0.05)', margin: '0.4rem 0' }} />
+                  <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', margin: '0.4rem 0' }} />
                 )}
 
                 {(isOpen || isCollapsed) && (
-                  <ul style={{ listStyle: 'none', paddingLeft: isCollapsed ? '0' : '0.5rem', marginTop: '0.2rem' }}>
+                  <ul style={{ listStyle: 'none', paddingLeft: 0, marginTop: '0.2rem' }}>
                     {validItems.map(item => {
                       const Icon = item.icon;
                       return (
@@ -399,16 +400,16 @@ export default function Sidebar() {
                             to={item.path}
                             className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                             style={{
-                              padding: isCollapsed ? '0.6rem 0' : '0.45rem 0.75rem',
+                              padding: isCollapsed ? '0.6rem 0' : '0.5rem 0.75rem',
                               justify: isCollapsed ? 'center' : 'flex-start',
-                              fontSize: '0.82rem'
+                              fontSize: '0.83rem'
                             }}
                             title={isCollapsed ? item.label : undefined}
                           >
                             <Icon size={16} />
                             {!isCollapsed && <span>{item.label}</span>}
                             {!isCollapsed && item.badge && (
-                              <span className="tag-badge tag-warning" style={{ marginLeft: 'auto', borderRadius: '9999px', fontSize: '0.7rem', padding: '0.1rem 0.4rem' }}>
+                              <span className="tag-badge tag-warning" style={{ marginLeft: 'auto', borderRadius: '9999px', fontSize: '0.68rem', padding: '0.1rem 0.4rem' }}>
                                 {item.badge}
                               </span>
                             )}

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Users as UsersIcon, UserPlus, Shield, CheckCircle, XCircle, Key, Edit, RefreshCw } from 'lucide-react';
 import { authService } from '../services/api';
+import { ALL_ROLES } from '../config/roles';
 
 export default function Users() {
   const [users, setUsers] = useState([]);
@@ -229,16 +230,9 @@ export default function Users() {
               <div className="form-group" style={{ marginBottom: '1rem' }}>
                 <label>Assign Application Role</label>
                 <select className="form-control" value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })}>
-                  <option value="admin">System Admin</option>
-                  <option value="management">Executive Management</option>
-                  <option value="project_manager">Project Manager</option>
-                  <option value="site_engineer">Site Engineer</option>
-                  <option value="procurement">Procurement Officer</option>
-                  <option value="finance">Finance & Accounting</option>
-                  <option value="hse">HSE Safety Manager</option>
-                  <option value="qc">Quality Control Officer</option>
-                  <option value="facility_manager">Facility Manager</option>
-                  <option value="customer">Client Customer Account</option>
+                  {ALL_ROLES.map(r => (
+                    <option key={r.id} value={r.id}>{r.label}</option>
+                  ))}
                 </select>
               </div>
 
@@ -275,16 +269,9 @@ export default function Users() {
               <div className="form-group" style={{ marginBottom: '1.5rem' }}>
                 <label>Assign Application Role</label>
                 <select className="form-control" value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })}>
-                  <option value="admin">System Admin</option>
-                  <option value="management">Executive Management</option>
-                  <option value="project_manager">Project Manager</option>
-                  <option value="site_engineer">Site Engineer</option>
-                  <option value="procurement">Procurement Officer</option>
-                  <option value="finance">Finance & Accounting</option>
-                  <option value="hse">HSE Safety Manager</option>
-                  <option value="qc">Quality Control Officer</option>
-                  <option value="facility_manager">Facility Manager</option>
-                  <option value="customer">Client Customer Account</option>
+                  {ALL_ROLES.map(r => (
+                    <option key={r.id} value={r.id}>{r.label}</option>
+                  ))}
                 </select>
               </div>
 

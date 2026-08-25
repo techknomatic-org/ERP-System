@@ -13,6 +13,7 @@ import QualityControl from './pages/QualityControl';
 import ContractorBilling from './pages/ContractorBilling';
 import BoqMb from './pages/BoqMb';
 import Vendors from './pages/Vendors';
+import Procurement from './pages/Procurement';
 import Projects from './pages/Projects';
 import ProjectDetails from './pages/ProjectDetails';
 import WbsGantt from './pages/WbsGantt';
@@ -39,29 +40,7 @@ import SessionManagement from './pages/SessionManagement';
 import AuditLogs from './pages/AuditLogs';
 import Settings from './pages/Settings';
 
-const ROLE_PERMITTED_ROUTES = {
-  admin: ["*"],
-  management: ["*"],
-  project_manager: ["/", "/projects", "/wbs", "/site-logs", "/boq-mb", "/approvals", "/vendors", "/inventory", "/properties", "/units", "/customers", "/audit-logs", "/settings", "/ai-analytics", "/tally", "/hse", "/quality", "/facility", "/financial-requests"],
-  site_engineer: ["/", "/projects", "/wbs", "/site-logs", "/boq-mb", "/inventory", "/hse", "/approvals", "/ai-analytics", "/financial-requests"],
-  finance: ["/", "/bookings", "/contractor-billing", "/projects", "/ai-analytics", "/tally", "/approvals", "/inventory", "/customers", "/audit-logs", "/settings", "/financial-requests"],
-  hse: ["/", "/hse", "/quality", "/approvals", "/projects", "/site-logs"],
-  qc: ["/", "/quality", "/hse", "/approvals", "/projects", "/boq-mb"],
-  facility_manager: ["/", "/facility", "/inventory", "/approvals", "/properties", "/units"],
-  customer: ["/portal"]
-};
-
-const ROLE_DEFAULT_DESTINATION = {
-  admin: "/",
-  management: "/",
-  project_manager: "/",
-  site_engineer: "/",
-  finance: "/",
-  hse: "/hse",
-  qc: "/quality",
-  facility_manager: "/facility",
-  customer: "/portal"
-};
+import { ROLE_PERMITTED_ROUTES, ROLE_DEFAULT_ROUTES as ROLE_DEFAULT_DESTINATION } from './config/roles';
 
 // Role & Permission Route Guard Component
 function RoleProtectedRouteGuard({ children, path }) {
@@ -80,7 +59,17 @@ function RoleProtectedRouteGuard({ children, path }) {
   }
 
   const allowed = ROLE_PERMITTED_ROUTES[role] || ["*"];
-  if (!allowed.includes("*") && !allowed.includes(path) && !path.startsWith('/projects/') && !path.startsWith('/properties/') && !path.startsWith('/units/') && !path.startsWith('/crm/leads/') && !path.startsWith('/bookings/') && !path.startsWith('/customers/')) {
+  if (
+    !allowed.includes("*") && 
+    !allowed.includes(path) && 
+    !path.startsWith('/projects/') && 
+    !path.startsWith('/properties/') && 
+    !path.startsWith('/units/') && 
+    !path.startsWith('/crm/leads/') && 
+    !path.startsWith('/bookings/') && 
+    !path.startsWith('/customers/') &&
+    !path.startsWith('/procurement')
+  ) {
     const dest = ROLE_DEFAULT_DESTINATION[role] || '/';
     return <Navigate to={dest} replace />;
   }
@@ -116,6 +105,8 @@ export default function App() {
           <Route path="/contractor-billing" element={<RoleProtectedRouteGuard path="/contractor-billing"><ContractorBilling /></RoleProtectedRouteGuard>} />
           <Route path="/boq-mb" element={<RoleProtectedRouteGuard path="/boq-mb"><BoqMb /></RoleProtectedRouteGuard>} />
           <Route path="/vendors" element={<RoleProtectedRouteGuard path="/vendors"><Vendors /></RoleProtectedRouteGuard>} />
+          <Route path="/procurement" element={<RoleProtectedRouteGuard path="/procurement"><Procurement /></RoleProtectedRouteGuard>} />
+          <Route path="/procurement/*" element={<RoleProtectedRouteGuard path="/procurement"><Procurement /></RoleProtectedRouteGuard>} />
           <Route path="/projects" element={<RoleProtectedRouteGuard path="/projects"><Projects /></RoleProtectedRouteGuard>} />
           <Route path="/projects/:id" element={<RoleProtectedRouteGuard path="/projects"><ProjectDetails /></RoleProtectedRouteGuard>} />
           <Route path="/wbs" element={<RoleProtectedRouteGuard path="/wbs"><WbsGantt /></RoleProtectedRouteGuard>} />

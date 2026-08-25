@@ -483,6 +483,9 @@ class VendorResponse(VendorBase):
 
 class PurchaseRequisitionBase(BaseModel):
     project_id: int
+    wbs_phase_id: Optional[int] = None
+    wbs_task_id: Optional[int] = None
+    wbs_subtask_id: Optional[int] = None
     title: str
     item_name: Optional[str] = None
     quantity: Optional[float] = None
@@ -491,6 +494,7 @@ class PurchaseRequisitionBase(BaseModel):
     required_date: Optional[datetime] = None
     reason: Optional[str] = None
     source_material_request_id: Optional[int] = None
+    mpr_number: Optional[str] = None
 
 class PurchaseRequisitionCreate(PurchaseRequisitionBase):
     pass
@@ -501,48 +505,84 @@ class PurchaseRequisitionResponse(PurchaseRequisitionBase):
     requester_id: int
     status: str
     created_at: datetime
+    project_name: Optional[str] = None
+    wbs_phase_title: Optional[str] = None
+    wbs_task_title: Optional[str] = None
+    wbs_subtask_title: Optional[str] = None
 
     class Config:
         from_attributes = True
 
 class PurchaseOrderCreate(BaseModel):
     pr_id: Optional[int] = None
+    mpr_id: Optional[int] = None
     project_id: int
+    wbs_phase_id: Optional[int] = None
+    wbs_task_id: Optional[int] = None
+    wbs_subtask_id: Optional[int] = None
     vendor_id: int
     item_name: Optional[str] = None
     quantity: Optional[float] = None
+    unit: Optional[str] = None
     unit_price: Optional[float] = None
     delivery_date: Optional[datetime] = None
+    po_date: Optional[datetime] = None
+    expected_delivery_date: Optional[datetime] = None
     total_amount: float
-    status: Optional[str] = "issued"
+    payment_terms: Optional[str] = None
+    delivery_terms: Optional[str] = None
+    remarks: Optional[str] = None
+    status: Optional[str] = "ISSUED"
 
 class PurchaseOrderResponse(BaseModel):
     id: int
     po_number: str
     pr_id: Optional[int] = None
+    mpr_id: Optional[int] = None
     project_id: int
+    wbs_phase_id: Optional[int] = None
+    wbs_task_id: Optional[int] = None
+    wbs_subtask_id: Optional[int] = None
     vendor_id: int
     item_name: Optional[str] = None
     quantity: Optional[float] = None
+    unit: Optional[str] = None
     unit_price: Optional[float] = None
     delivery_date: Optional[datetime] = None
+    po_date: Optional[datetime] = None
+    expected_delivery_date: Optional[datetime] = None
     total_amount: float
+    payment_terms: Optional[str] = None
+    delivery_terms: Optional[str] = None
+    remarks: Optional[str] = None
     status: str
     created_at: datetime
     vendor: Optional[VendorResponse] = None
+    project_name: Optional[str] = None
+    wbs_phase_title: Optional[str] = None
+    wbs_task_title: Optional[str] = None
+    wbs_subtask_title: Optional[str] = None
+    pr_number: Optional[str] = None
+    mpr_number: Optional[str] = None
+    received_quantity: Optional[float] = 0.0
+    remaining_quantity: Optional[float] = 0.0
 
     class Config:
         from_attributes = True
 
 class MaterialPurchaseRequestCreate(BaseModel):
     project_id: int
+    wbs_phase_id: Optional[int] = None
+    wbs_task_id: Optional[int] = None
+    wbs_subtask_id: Optional[int] = None
     material_name: str
     material_category: Optional[str] = "General Construction"
     quantity: float
     unit: str
     required_date: Optional[datetime] = None
-    reason: Optional[str] = None
+    estimated_unit_rate: Optional[float] = None
     estimated_cost: float
+    reason: Optional[str] = None
     stock_availability: Optional[str] = "Not Available - Purchase Required"
     preferred_vendor_id: Optional[int] = None
     remarks: Optional[str] = None
@@ -551,20 +591,28 @@ class MaterialPurchaseRequestResponse(BaseModel):
     id: int
     request_number: str
     project_id: int
+    wbs_phase_id: Optional[int] = None
+    wbs_task_id: Optional[int] = None
+    wbs_subtask_id: Optional[int] = None
     requested_by: int
     material_name: str
     material_category: Optional[str] = "General Construction"
     quantity: float
     unit: str
     required_date: Optional[datetime] = None
-    reason: Optional[str] = None
+    estimated_unit_rate: Optional[float] = None
     estimated_cost: float
+    reason: Optional[str] = None
     stock_availability: Optional[str] = "Not Available - Purchase Required"
     preferred_vendor_id: Optional[int] = None
     remarks: Optional[str] = None
     status: str
     current_approval_stage: str
     created_at: datetime
+    project_name: Optional[str] = None
+    wbs_phase_title: Optional[str] = None
+    wbs_task_title: Optional[str] = None
+    wbs_subtask_title: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -595,6 +643,9 @@ class MaterialDeliveryResponse(BaseModel):
     status: str
     inspection_remarks: Optional[str] = None
     created_at: datetime
+    po_number: Optional[str] = None
+    vendor_name: Optional[str] = None
+    project_name: Optional[str] = None
 
     class Config:
         from_attributes = True

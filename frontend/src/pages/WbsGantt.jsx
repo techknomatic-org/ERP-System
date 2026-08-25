@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Layers, Plus, Calendar, Clock, CheckCircle2, AlertTriangle, Edit3, Trash2, ArrowLeft, ChevronDown, ChevronRight, CornerDownRight, FolderTree, X } from 'lucide-react';
+import { Layers, Plus, Calendar, Clock, CheckCircle2, AlertTriangle, Edit3, Trash2, ArrowLeft, ChevronDown, ChevronRight, CornerDownRight, FolderTree, X, BarChart3, ListFilter } from 'lucide-react';
 import { projectService, wbsService } from '../services/api';
 
 export default function WbsGantt() {
@@ -13,6 +13,9 @@ export default function WbsGantt() {
   const [rawTasks, setRawTasks] = useState([]);
   const [loading, setLoading] = useState(false);
   
+  // View Switcher State: 'table' vs 'gantt'
+  const [activeView, setActiveView] = useState('table');
+
   // Collapse state for Phase and Task IDs
   const [collapsed, setCollapsed] = useState({});
 
@@ -76,7 +79,7 @@ export default function WbsGantt() {
     setCollapsed(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Build True Hierarchical WBS Tree with Bottom-Up Progress & BOQ Budget Rollup Calculation
+  // Build True Hierarchical WBS Tree
   const buildTree = () => {
     const phases = rawTasks.filter(t => {
       const lvl = (t.task_level || '').toLowerCase();
@@ -101,7 +104,8 @@ export default function WbsGantt() {
           taskProgress = Math.round((sumSub / subtasks.length) * 100) / 100;
         }
 
-        let taskStatus = taskProgress >= 100 ? 'completed' : (taskProgress > 0 ? 'in_progress' : 'not_started');
+        const isStartedByDate = task.start_date && new Date(task.start_date) <= new Date();
+        let taskStatus = task.status || (taskProgress >= 100 ? 'completed' : (taskProgress > 0 || isStartedByDate ? 'in_progress' : 'not_started'));
 
         return { 
           ...task, 
@@ -122,7 +126,8 @@ export default function WbsGantt() {
         phaseProgress = Math.round((sumTask / taskNodes.length) * 100) / 100;
       }
 
-      let phaseStatus = phaseProgress >= 100 ? 'completed' : (phaseProgress > 0 ? 'in_progress' : 'not_started');
+      const isPhaseStartedByDate = phase.start_date && new Date(phase.start_date) <= new Date();
+      let phaseStatus = phase.status || (phaseProgress >= 100 ? 'completed' : (phaseProgress > 0 || isPhaseStartedByDate ? 'in_progress' : 'not_started'));
 
       return { 
         ...phase, 
@@ -137,36 +142,6 @@ export default function WbsGantt() {
       };
     });
 
-    const handledIds = new Set();
-    phaseMap.forEach(p => {
-      handledIds.add(p.id);
-      p.tasks.forEach(t => {
-        handledIds.add(t.id);
-        t.subtasks.forEach(s => handledIds.add(s.id));
-      });
-    });
-
-    const unhandled = rawTasks.filter(t => !handledIds.has(t.id));
-    if (unhandled.length > 0) {
-      phaseMap.push({
-        id: -999,
-        title: 'General / Uncategorized Phase',
-        task_level: 'Phase',
-        contractor_name: 'In-House',
-        start_date: new Date().toISOString(),
-        end_date: new Date().toISOString(),
-        planned_budget: 0,
-        required_till_now: 0,
-        remaining_budget: 0,
-        budget_utilization_pct: 0,
-        progress_pct: 0,
-        status: 'in_progress',
-        isCalculated: false,
-        tasks: unhandled.map(u => ({ ...u, subtasks: [], isCalculated: false, linked_boqs: u.linked_boqs || [] })),
-        linked_boqs: []
-      });
-    }
-
     return phaseMap;
   };
 
@@ -178,7 +153,6 @@ export default function WbsGantt() {
   const totalRemainingBudget = totalPlannedBudget - totalRequiredTillNow;
   const overallUtilizationPct = totalPlannedBudget > 0 ? Math.round((totalRequiredTillNow / totalPlannedBudget) * 100) : 0;
 
-  // Helper arrays for dropdowns
   const availablePhases = rawTasks.filter(t => (t.task_level || '').toLowerCase() === 'phase' || !t.parent_task_id);
   const availableTasks = rawTasks.filter(t => {
     const lvl = (t.task_level || '').toLowerCase();
@@ -189,7 +163,6 @@ export default function WbsGantt() {
     return true;
   });
 
-  // Shortcut to add Task from Phase
   const handleAddTaskFromPhase = (phaseId) => {
     setFormData({
       item_type: 'Task',
@@ -205,7 +178,6 @@ export default function WbsGantt() {
     setShowCreateModal(true);
   };
 
-  // Shortcut to add Subtask from Task
   const handleAddSubtaskFromTask = (phaseId, taskId) => {
     setFormData({
       item_type: 'Subtask',
@@ -221,150 +193,110 @@ export default function WbsGantt() {
     setShowCreateModal(true);
   };
 
-  // Open Edit / Update Modal for Phase, Task, or Subtask
   const handleOpenEditModal = (item, parentPhaseName = '', parentTaskName = '') => {
-    const sDate = item.start_date ? new Date(item.start_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-    const eDate = item.end_date ? new Date(item.end_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-
-    setEditModalItem({
-      ...item,
-      parent_phase_name: parentPhaseName,
-      parent_task_name: parentTaskName
-    });
-
+    setEditModalItem({ ...item, parent_phase_name: parentPhaseName, parent_task_name: parentTaskName });
     setEditFormData({
       title: item.title || '',
-      contractor_name: item.contractor_name || 'In-House',
-      start_date: sDate,
-      end_date: eDate,
-      planned_budget: item.planned_budget !== undefined ? item.planned_budget.toString() : '0',
+      contractor_name: item.contractor_name || '',
+      start_date: item.start_date ? new Date(item.start_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      end_date: item.end_date ? new Date(item.end_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      planned_budget: item.planned_budget || 0,
       progress_pct: item.progress_pct || 0
     });
-
     setEditFormError('');
   };
 
-  // Save Changes Submit Handler
-  const handleEditSubmit = (e) => {
-    e.preventDefault();
-    if (!editModalItem) return;
-    setEditFormError('');
-
-    // Date range validation check
-    if (new Date(editFormData.start_date) > new Date(editFormData.end_date)) {
-      setEditFormError("Start Date cannot be after End Date.");
-      return;
-    }
-
-    const payload = {
-      title: editFormData.title.trim(),
-      contractor_name: editFormData.contractor_name.trim() || 'In-House',
-      start_date: new Date(editFormData.start_date).toISOString(),
-      end_date: new Date(editFormData.end_date).toISOString(),
-      planned_budget: parseFloat(editFormData.planned_budget || 0)
-    };
-
-    // If item has no children, include progress_pct in update payload
-    if (!editModalItem.isCalculated) {
-      payload.progress_pct = parseFloat(editFormData.progress_pct || 0);
-    }
-
-    wbsService.updateTask(editModalItem.id, payload)
-      .then(() => {
-        setEditModalItem(null);
-        loadWbs(selectedProjectId);
-      })
-      .catch((err) => {
-        setEditFormError(err.response?.data?.detail || "Unable to update record. Please try again.");
-      });
-  };
-
-  // Handle Form Submit for Creation
   const handleCreateSubmit = (e) => {
     e.preventDefault();
-    setFormError('');
-
-    if (formData.item_type === 'Task' && !formData.parent_phase_id) {
-      setFormError("Parent Phase is required for a Task.");
+    if (!selectedProjectId) {
+      setFormError("Please select a project first.");
       return;
     }
-
-    if (formData.item_type === 'Subtask') {
-      if (!formData.parent_phase_id) {
-        setFormError("Parent Phase is required for a Subtask.");
-        return;
-      }
-      if (!formData.parent_task_id) {
-        setFormError("Parent Task is required for a Subtask.");
-        return;
-      }
-    }
-
-    let parentIdToSend = null;
-    if (formData.item_type === 'Task') {
-      parentIdToSend = parseInt(formData.parent_phase_id);
-    } else if (formData.item_type === 'Subtask') {
-      parentIdToSend = parseInt(formData.parent_task_id);
+    if (!formData.title) {
+      setFormError("Title is required.");
+      return;
     }
 
     wbsService.createTask({
       project_id: parseInt(selectedProjectId),
-      parent_task_id: parentIdToSend,
-      title: formData.title,
       task_level: formData.item_type,
-      contractor_name: formData.contractor_name,
+      parent_task_id: formData.item_type === 'Subtask' ? parseInt(formData.parent_task_id) : (formData.item_type === 'Task' ? parseInt(formData.parent_phase_id) : null),
+      title: formData.title,
+      contractor_name: formData.contractor_name || 'In-House',
+      planned_budget: parseFloat(formData.planned_budget || 0),
       start_date: new Date(formData.start_date).toISOString(),
-      end_date: new Date(formData.end_date).toISOString(),
-      planned_budget: parseFloat(formData.planned_budget || 0)
+      end_date: new Date(formData.end_date).toISOString()
     })
       .then(() => {
         setShowCreateModal(false);
-        setFormData({
-          item_type: 'Phase',
-          parent_phase_id: '',
-          parent_task_id: '',
-          title: '',
-          contractor_name: '',
-          start_date: new Date().toISOString().split('T')[0],
-          end_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-          planned_budget: ''
-        });
+        setFormData({ item_type: 'Phase', parent_phase_id: '', parent_task_id: '', title: '', contractor_name: '', start_date: new Date().toISOString().split('T')[0], end_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0], planned_budget: '' });
         loadWbs(selectedProjectId);
       })
-      .catch((err) => {
-        setFormError(err.response?.data?.detail || "Failed to create WBS item");
-      });
+      .catch((err) => setFormError(err.response?.data?.detail || "Failed to create WBS item"));
   };
 
-  // Handle Delete Task
-  const handleDeleteTask = (taskId, taskTitle, hasChildren) => {
-    const confirmMsg = hasChildren 
-      ? `Are you sure you want to delete '${taskTitle}' and all of its child tasks/subtasks?`
-      : `Are you sure you want to delete WBS item '${taskTitle}'?`;
-    
-    if (window.confirm(confirmMsg)) {
-      wbsService.deleteTask(taskId)
+  const handleEditSubmit = (e) => {
+    e.preventDefault();
+    if (!editModalItem) return;
+
+    wbsService.updateTask(editModalItem.id, {
+      title: editFormData.title,
+      contractor_name: editFormData.contractor_name,
+      planned_budget: parseFloat(editFormData.planned_budget),
+      start_date: new Date(editFormData.start_date).toISOString(),
+      end_date: new Date(editFormData.end_date).toISOString(),
+      progress_pct: editModalItem.isCalculated ? editModalItem.progress_pct : parseFloat(editFormData.progress_pct)
+    })
+      .then(() => {
+        setEditModalItem(null);
+        loadWbs(selectedProjectId);
+      })
+      .catch((err) => setEditFormError(err.response?.data?.detail || "Failed to update WBS item"));
+  };
+
+  const handleDeleteTask = (id, title, hasChildren) => {
+    if (hasChildren) {
+      alert(`Cannot delete '${title}' because it contains child tasks/subtasks. Please remove child items first.`);
+      return;
+    }
+    if (window.confirm(`Are you sure you want to delete '${title}'?`)) {
+      wbsService.deleteTask(id)
         .then(() => loadWbs(selectedProjectId))
-        .catch((err) => alert(err.response?.data?.detail || "Failed to delete task"));
+        .catch(() => alert("Failed to delete task."));
     }
   };
 
   const currentProject = projects.find(p => p.id === parseInt(selectedProjectId));
 
-  // Compute status badge text dynamically from progress
-  const getDerivedStatusInfo = (prog) => {
-    const p = Number(prog || 0);
-    if (p >= 100) return { label: 'COMPLETED', tagClass: 'tag-success' };
-    if (p > 0) return { label: 'IN PROGRESS', tagClass: 'tag-info' };
+  // Dynamic Status Resolver taking into account DB status, start date, and progress %
+  const getDerivedStatusInfo = (item, overrideProg) => {
+    if (!item) return { label: 'NOT STARTED', tagClass: 'tag-warning' };
+    const prog = overrideProg !== undefined ? Number(overrideProg || 0) : Number(item.progress_pct || 0);
+    const dbStatus = (item.status || '').toLowerCase();
+
+    if (dbStatus === 'completed' || prog >= 100) return { label: 'COMPLETED', tagClass: 'tag-success' };
+    if (dbStatus === 'in_progress' || prog > 0) return { label: 'IN PROGRESS', tagClass: 'tag-info' };
+
+    if (item.start_date || editFormData.start_date) {
+      const sDateStr = editFormData.start_date || item.start_date;
+      const start = new Date(sDateStr);
+      const today = new Date();
+      if (!isNaN(start.getTime()) && start <= today) {
+        return { label: 'IN PROGRESS', tagClass: 'tag-info' };
+      }
+    }
+
     return { label: 'NOT STARTED', tagClass: 'tag-warning' };
   };
+
+  const timelineMonths = ['Jan 2026', 'Feb 2026', 'Mar 2026', 'Apr 2026', 'May 2026', 'Jun 2026', 'Jul 2026', 'Aug 2026', 'Sep 2026', 'Oct 2026', 'Nov 2026', 'Dec 2026'];
 
   return (
     <div className="content-page">
       {/* Header Controls */}
       <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         {selectedProjectId ? (
-          <button className="btn btn-secondary" onClick={() => navigate(`/projects/${selectedProjectId}`)}>
+          <button type="button" className="btn btn-secondary" onClick={() => navigate(`/projects/${selectedProjectId}`)}>
             <ArrowLeft size={16} /> Back to Project Details
           </button>
         ) : <div />}
@@ -376,19 +308,19 @@ export default function WbsGantt() {
         )}
       </div>
 
-      <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+      <div className="section-header">
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <Layers color="#38bdf8" size={28} /> WBS Hierarchy & Gantt Budget Rollup
+            <Layers color="var(--primary)" size={28} /> WBS Hierarchy & Gantt Timeline Workspace
           </h1>
           <p className="page-subtitle">
-            Hierarchical Phase ➔ Task ➔ Subtask budget tracking with bottom-up BOQ requirement rollups & execution monitoring
+            Hierarchical Phase ➔ Task ➔ Subtask budget tracking & visual Gantt schedule execution timeline
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <select 
-            className="form-control" 
+            className="form-select" 
             style={{ width: '220px' }}
             value={selectedProjectId}
             onChange={(e) => setSelectedProjectId(e.target.value)}
@@ -398,333 +330,353 @@ export default function WbsGantt() {
             ))}
           </select>
 
-          <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+          {/* VIEW SWITCHER TABS */}
+          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', padding: '0.2rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <button
+              type="button"
+              className={`btn btn-sm ${activeView === 'table' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ border: 'none' }}
+              onClick={() => setActiveView('table')}
+            >
+              <FolderTree size={14} /> WBS Hierarchy Table
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${activeView === 'gantt' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ border: 'none' }}
+              onClick={() => setActiveView('gantt')}
+            >
+              <BarChart3 size={14} /> Interactive Gantt Chart
+            </button>
+          </div>
+
+          <button type="button" className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
             <Plus size={16} /> Add WBS Item
           </button>
         </div>
       </div>
 
       {/* SUMMARY METRICS BAR */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-        <div className="glass-card" style={{ padding: '1rem' }}>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Planned Budget</div>
-          <div style={{ fontSize: '1.35rem', fontWeight: 700, color: '#38bdf8', marginTop: '0.25rem' }}>
-            ₹{totalPlannedBudget.toLocaleString()}
+      <div className="kpi-grid">
+        <div className="kpi-card">
+          <div>
+            <div className="kpi-title">Planned Budget</div>
+            <div className="kpi-value" style={{ color: 'var(--accent-cyan)' }}>₹{totalPlannedBudget.toLocaleString()}</div>
           </div>
         </div>
 
-        <div className="glass-card" style={{ padding: '1rem' }}>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Required Till Now</div>
-          <div style={{ fontSize: '1.35rem', fontWeight: 700, color: '#f59e0b', marginTop: '0.25rem' }}>
-            ₹{totalRequiredTillNow.toLocaleString()}
+        <div className="kpi-card">
+          <div>
+            <div className="kpi-title">Required Till Now</div>
+            <div className="kpi-value" style={{ color: 'var(--accent-amber)' }}>₹{totalRequiredTillNow.toLocaleString()}</div>
           </div>
         </div>
 
-        <div className="glass-card" style={{ padding: '1rem' }}>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Remaining Budget</div>
-          <div style={{ fontSize: '1.35rem', fontWeight: 700, color: totalRemainingBudget < 0 ? '#f43f5e' : '#10b981', marginTop: '0.25rem' }}>
-            {totalRemainingBudget < 0 ? `-₹${Math.abs(totalRemainingBudget).toLocaleString()}` : `₹${totalRemainingBudget.toLocaleString()}`}
+        <div className="kpi-card">
+          <div>
+            <div className="kpi-title">Remaining Budget</div>
+            <div className="kpi-value" style={{ color: totalRemainingBudget < 0 ? 'var(--accent-rose)' : 'var(--accent-emerald)' }}>
+              {totalRemainingBudget < 0 ? `-₹${Math.abs(totalRemainingBudget).toLocaleString()}` : `₹${totalRemainingBudget.toLocaleString()}`}
+            </div>
           </div>
         </div>
 
-        <div className="glass-card" style={{ padding: '1rem' }}>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Budget Utilization</div>
-          <div style={{ fontSize: '1.35rem', fontWeight: 700, color: overallUtilizationPct > 100 ? '#f43f5e' : overallUtilizationPct >= 80 ? '#f59e0b' : '#10b981', marginTop: '0.25rem' }}>
-            {overallUtilizationPct}%
+        <div className="kpi-card">
+          <div>
+            <div className="kpi-title">Budget Utilization</div>
+            <div className="kpi-value" style={{ color: overallUtilizationPct > 100 ? 'var(--accent-rose)' : 'var(--accent-emerald)' }}>
+              {overallUtilizationPct}%
+            </div>
           </div>
         </div>
       </div>
 
-      {/* WBS Task Hierarchy Table */}
-      <div className="glass-card" style={{ marginBottom: '2rem' }}>
-        <h3 style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <FolderTree size={20} color="#38bdf8" /> Work Breakdown Structure & Budget Rollup Table
-        </h3>
-        <div className="table-container">
-          <table className="custom-table">
-            <thead>
-              <tr>
-                <th style={{ width: '90px' }}>Level</th>
-                <th>Phase / Task / Subtask Title</th>
-                <th>Contractor</th>
-                <th>Planned Budget</th>
-                <th>Required Till Now</th>
-                <th>Remaining Budget</th>
-                <th>Utilization %</th>
-                <th>Progress %</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {treeData.length === 0 ? (
+      {/* 1. VIEW 1: WBS TASK HIERARCHY TABLE */}
+      {activeView === 'table' && (
+        <div className="glass-card" style={{ marginBottom: '2rem' }}>
+          <div className="card-header">
+            <div className="card-title"><FolderTree size={18} color="var(--primary)" /> Work Breakdown Structure & Budget Rollup Table</div>
+          </div>
+          <div className="table-container">
+            <table className="custom-table">
+              <thead>
                 <tr>
-                  <td colSpan="10" style={{ textAlign: 'center', color: '#64748b', padding: '2.5rem' }}>
-                    {loading ? "Loading WBS hierarchy..." : "No WBS records found for this project. Click 'Add WBS Item' to create a Phase."}
-                  </td>
+                  <th style={{ width: '90px' }}>Level</th>
+                  <th>Phase / Task / Subtask Title</th>
+                  <th>Contractor</th>
+                  <th>Planned Budget</th>
+                  <th>Required Till Now</th>
+                  <th>Remaining Budget</th>
+                  <th>Utilization %</th>
+                  <th>Progress %</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
-              ) : (
-                treeData.map((phase) => {
-                  const isPhaseCollapsed = collapsed[phase.id];
-                  const isOverBudget = phase.remaining_budget < 0;
+              </thead>
+              <tbody>
+                {treeData.length === 0 ? (
+                  <tr>
+                    <td colSpan="10" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2.5rem' }}>
+                      {loading ? "Loading WBS hierarchy..." : "No WBS records found. Click 'Add WBS Item' to create a Phase."}
+                    </td>
+                  </tr>
+                ) : (
+                  treeData.map((phase) => {
+                    const isPhaseCollapsed = collapsed[phase.id];
+                    const isOverBudget = phase.remaining_budget < 0;
+                    const phaseStatusInfo = getDerivedStatusInfo(phase);
 
-                  return (
-                    <React.Fragment key={`phase-${phase.id}`}>
-                      {/* PHASE ROW */}
-                      <tr style={{ background: 'rgba(56,189,248,0.06)', borderLeft: '4px solid #38bdf8' }}>
-                        <td>
-                          <span className="tag-badge tag-info" style={{ fontWeight: 700 }}>
-                            Phase
-                          </span>
-                        </td>
-                        <td style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.95rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }} onClick={() => toggleCollapse(phase.id)}>
-                            <button className="btn" style={{ padding: '2px', background: 'transparent', color: '#38bdf8' }}>
-                              {isPhaseCollapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
-                            </button>
-                            <span>{phase.title}</span>
-                          </div>
-                        </td>
-                        <td style={{ color: '#94a3b8' }}>{phase.contractor_name || 'In-House'}</td>
-                        <td style={{ fontWeight: 700, color: '#38bdf8' }}>₹{Number(phase.planned_budget).toLocaleString()}</td>
-                        <td style={{ fontWeight: 700, color: '#f59e0b' }}>₹{Number(phase.required_till_now).toLocaleString()}</td>
-                        <td>
-                          {isOverBudget ? (
-                            <span className="tag-badge tag-danger" style={{ fontWeight: 700 }}>
-                              OVER BUDGET: ₹{Math.abs(phase.remaining_budget).toLocaleString()}
-                            </span>
-                          ) : (
-                            <span style={{ fontWeight: 700, color: '#10b981' }}>
-                              ₹{Number(phase.remaining_budget).toLocaleString()}
-                            </span>
-                          )}
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                            <div style={{ flex: 1, height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden' }}>
-                              <div style={{ 
-                                width: `${Math.min(100, phase.budget_utilization_pct)}%`, 
-                                height: '100%', 
-                                background: phase.budget_utilization_pct > 100 ? '#f43f5e' : phase.budget_utilization_pct >= 80 ? '#f59e0b' : '#10b981' 
-                              }} />
+                    return (
+                      <React.Fragment key={`phase-${phase.id}`}>
+                        <tr style={{ background: 'rgba(99,102,241,0.06)', borderLeft: '4px solid var(--primary)' }}>
+                          <td><span className="tag-badge tag-info">Phase</span></td>
+                          <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }} onClick={() => toggleCollapse(phase.id)}>
+                              <button type="button" className="btn" style={{ padding: '2px', background: 'transparent', color: 'var(--primary)' }}>
+                                {isPhaseCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                              </button>
+                              <span>{phase.title}</span>
                             </div>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: phase.budget_utilization_pct > 100 ? '#f43f5e' : '#f8fafc' }}>
-                              {phase.budget_utilization_pct}%
+                          </td>
+                          <td style={{ color: 'var(--text-secondary)' }}>{phase.contractor_name || 'In-House'}</td>
+                          <td style={{ fontWeight: 700, color: 'var(--accent-cyan)' }}>₹{Number(phase.planned_budget).toLocaleString()}</td>
+                          <td style={{ fontWeight: 700, color: 'var(--accent-amber)' }}>₹{Number(phase.required_till_now).toLocaleString()}</td>
+                          <td>
+                            {isOverBudget ? (
+                              <span className="tag-badge tag-danger">OVER BUDGET: ₹{Math.abs(phase.remaining_budget).toLocaleString()}</span>
+                            ) : (
+                              <span style={{ fontWeight: 700, color: 'var(--accent-emerald)' }}>₹{Number(phase.remaining_budget).toLocaleString()}</span>
+                            )}
+                          </td>
+                          <td>{Number(phase.budget_utilization_pct || 0)}%</td>
+                          <td><strong style={{ color: 'var(--accent-emerald)' }}>{Number(phase.progress_pct || 0)}%</strong></td>
+                          <td>
+                            <span className={`tag-badge ${phaseStatusInfo.tagClass}`}>
+                              {phaseStatusInfo.label}
                             </span>
-                          </div>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                            <span style={{ fontWeight: 700, fontSize: '0.8rem', color: '#10b981' }}>{phase.progress_pct}%</span>
-                          </div>
-                        </td>
-                        <td>
-                          <span className={`tag-badge ${
-                            phase.status === 'completed' ? 'tag-success' :
-                            phase.status === 'in_progress' ? 'tag-info' : 'tag-warning'
-                          }`}>
-                            {(phase.status || 'not_started').replace('_', ' ').toUpperCase()}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: '0.35rem', alignItems: 'center' }}>
-                            {phase.id !== -999 && (
-                              <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', borderColor: '#38bdf8', color: '#38bdf8' }} onClick={() => handleOpenEditModal(phase, '', '')}>
-                                <Edit3 size={12} /> Edit / Update
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
+                              <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleOpenEditModal(phase, '', '')}>
+                                <Edit3 size={12} /> Edit
                               </button>
-                            )}
-                            {phase.id !== -999 && (
-                              <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', borderColor: '#f59e0b', color: '#f59e0b' }} onClick={() => handleAddTaskFromPhase(phase.id)}>
-                                <Plus size={12} /> Add Task
+                              <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleAddTaskFromPhase(phase.id)}>
+                                <Plus size={12} /> Task
                               </button>
-                            )}
-                            {phase.id !== -999 && (
-                              <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', borderColor: '#f43f5e', color: '#f43f5e' }} onClick={() => handleDeleteTask(phase.id, phase.title, phase.tasks.length > 0)}>
+                              <button type="button" className="btn btn-danger btn-sm" onClick={() => handleDeleteTask(phase.id, phase.title, phase.tasks.length > 0)}>
                                 <Trash2 size={12} />
                               </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+                            </div>
+                          </td>
+                        </tr>
 
-                      {/* TASKS UNDER PHASE (if Phase not collapsed) */}
-                      {!isPhaseCollapsed && phase.tasks.map((task) => {
-                        const isTaskCollapsed = collapsed[task.id];
-                        const hasSubtasks = task.subtasks && task.subtasks.length > 0;
-                        const isTaskOverBudget = task.remaining_budget < 0;
+                        {!isPhaseCollapsed && phase.tasks.map((task) => {
+                          const isTaskCollapsed = collapsed[task.id];
+                          const hasSubtasks = task.subtasks && task.subtasks.length > 0;
+                          const taskStatusInfo = getDerivedStatusInfo(task);
 
-                        return (
-                          <React.Fragment key={`task-${task.id}`}>
-                            {/* TASK ROW */}
-                            <tr style={{ background: 'rgba(245,158,11,0.04)', borderLeft: '4px solid #f59e0b' }}>
-                              <td>
-                                <span className="tag-badge tag-warning" style={{ marginLeft: '0.8rem', fontSize: '0.75rem' }}>
-                                  Task
-                                </span>
-                              </td>
-                              <td style={{ fontWeight: 600, color: '#f8fafc', paddingLeft: '1.75rem' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                  {hasSubtasks ? (
-                                    <button className="btn" style={{ padding: '2px', background: 'transparent', color: '#f59e0b' }} onClick={() => toggleCollapse(task.id)}>
-                                      {isTaskCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-                                    </button>
-                                  ) : (
-                                    <span style={{ width: '16px', display: 'inline-block', textAlign: 'center', color: '#64748b' }}>├──</span>
-                                  )}
-                                  <span>{task.title}</span>
-                                </div>
-                              </td>
-                              <td style={{ color: '#94a3b8' }}>{task.contractor_name || 'In-House'}</td>
-                              <td style={{ fontWeight: 600, color: '#38bdf8' }}>₹{Number(task.planned_budget).toLocaleString()}</td>
-                              <td style={{ fontWeight: 600, color: '#f59e0b' }}>₹{Number(task.required_till_now).toLocaleString()}</td>
-                              <td>
-                                {isTaskOverBudget ? (
-                                  <span className="tag-badge tag-danger" style={{ fontWeight: 600, fontSize: '0.75rem' }}>
-                                    OVER BUDGET: ₹{Math.abs(task.remaining_budget).toLocaleString()}
-                                  </span>
-                                ) : (
-                                  <span style={{ fontWeight: 600, color: '#10b981' }}>
-                                    ₹{Number(task.remaining_budget).toLocaleString()}
-                                  </span>
-                                )}
-                              </td>
-                              <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                  <div style={{ flex: 1, height: '5px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden' }}>
-                                    <div style={{ 
-                                      width: `${Math.min(100, task.budget_utilization_pct)}%`, 
-                                      height: '100%', 
-                                      background: task.budget_utilization_pct > 100 ? '#f43f5e' : task.budget_utilization_pct >= 80 ? '#f59e0b' : '#10b981' 
-                                    }} />
+                          return (
+                            <React.Fragment key={`task-${task.id}`}>
+                              <tr style={{ background: 'rgba(245,158,11,0.03)', borderLeft: '4px solid var(--accent-amber)' }}>
+                                <td><span className="tag-badge tag-warning" style={{ marginLeft: '0.75rem' }}>Task</span></td>
+                                <td style={{ paddingLeft: '1.75rem' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    {hasSubtasks ? (
+                                      <button type="button" className="btn" style={{ padding: '2px', background: 'transparent', color: 'var(--accent-amber)' }} onClick={() => toggleCollapse(task.id)}>
+                                        {isTaskCollapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
+                                      </button>
+                                    ) : <span style={{ width: '16px', color: 'var(--text-muted)' }}>├──</span>}
+                                    <span>{task.title}</span>
                                   </div>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{task.budget_utilization_pct}%</span>
-                                </div>
-                              </td>
-                              <td>
-                                <span style={{ fontWeight: 600, fontSize: '0.8rem', color: '#10b981' }}>{task.progress_pct}%</span>
-                              </td>
-                              <td>
-                                <span className={`tag-badge ${
-                                  task.status === 'completed' ? 'tag-success' :
-                                  task.status === 'in_progress' ? 'tag-info' : 'tag-warning'
-                                }`}>
-                                  {(task.status || 'not_started').replace('_', ' ').toUpperCase()}
-                                </span>
-                              </td>
-                              <td style={{ textAlign: 'right' }}>
-                                <div style={{ display: 'inline-flex', gap: '0.35rem', alignItems: 'center' }}>
-                                  <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', borderColor: '#f59e0b', color: '#f59e0b' }} onClick={() => handleOpenEditModal(task, phase.title, '')}>
-                                    <Edit3 size={12} /> Edit / Update
-                                  </button>
-                                  <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', borderColor: '#10b981', color: '#10b981' }} onClick={() => handleAddSubtaskFromTask(phase.id, task.id)}>
-                                    <Plus size={12} /> Add Subtask
-                                  </button>
-                                  <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', borderColor: '#f43f5e', color: '#f43f5e' }} onClick={() => handleDeleteTask(task.id, task.title, hasSubtasks)}>
-                                    <Trash2 size={12} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
+                                </td>
+                                <td>{task.contractor_name || 'In-House'}</td>
+                                <td style={{ fontWeight: 600, color: 'var(--accent-cyan)' }}>₹{Number(task.planned_budget).toLocaleString()}</td>
+                                <td style={{ fontWeight: 600, color: 'var(--accent-amber)' }}>₹{Number(task.required_till_now).toLocaleString()}</td>
+                                <td>₹{Number(task.remaining_budget).toLocaleString()}</td>
+                                <td>{Number(task.budget_utilization_pct || 0)}%</td>
+                                <td>{Number(task.progress_pct || 0)}%</td>
+                                <td>
+                                  <span className={`tag-badge ${taskStatusInfo.tagClass}`}>
+                                    {taskStatusInfo.label}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: 'right' }}>
+                                  <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
+                                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleOpenEditModal(task, phase.title, '')}>
+                                      <Edit3 size={12} /> Edit
+                                    </button>
+                                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleAddSubtaskFromTask(phase.id, task.id)}>
+                                      <Plus size={12} /> Subtask
+                                    </button>
+                                    <button type="button" className="btn btn-danger btn-sm" onClick={() => handleDeleteTask(task.id, task.title, hasSubtasks)}>
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
 
-                            {/* SUBTASKS UNDER TASK (if Task not collapsed) */}
-                            {!isTaskCollapsed && task.subtasks.map((subtask) => {
-                              const isSubOverBudget = (subtask.remaining_budget || 0) < 0;
-
-                              return (
-                                <React.Fragment key={`subtask-${subtask.id}`}>
-                                  <tr style={{ background: 'rgba(16,185,129,0.02)', borderLeft: '4px solid #10b981' }}>
-                                    <td>
-                                      <span className="tag-badge tag-success" style={{ marginLeft: '1.6rem', fontSize: '0.7rem' }}>
-                                        Subtask
-                                      </span>
-                                    </td>
-                                    <td style={{ color: '#cbd5e1', paddingLeft: '2.5rem' }}>
+                              {!isTaskCollapsed && task.subtasks.map((subtask) => {
+                                const subStatusInfo = getDerivedStatusInfo(subtask);
+                                return (
+                                  <tr key={`subtask-${subtask.id}`} style={{ background: 'rgba(16,185,129,0.02)', borderLeft: '4px solid var(--accent-emerald)' }}>
+                                    <td><span className="tag-badge tag-success" style={{ marginLeft: '1.5rem' }}>Subtask</span></td>
+                                    <td style={{ paddingLeft: '2.5rem' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                        <CornerDownRight size={14} color="#10b981" />
+                                        <CornerDownRight size={14} color="var(--accent-emerald)" />
                                         <span>{subtask.title}</span>
                                       </div>
                                     </td>
-                                    <td style={{ color: '#94a3b8' }}>{subtask.contractor_name || 'In-House'}</td>
-                                    <td style={{ fontWeight: 600, color: '#38bdf8' }}>₹{Number(subtask.planned_budget || 0).toLocaleString()}</td>
-                                    <td style={{ fontWeight: 600, color: '#f59e0b' }}>₹{Number(subtask.required_till_now || 0).toLocaleString()}</td>
+                                    <td>{subtask.contractor_name || 'In-House'}</td>
+                                    <td style={{ color: 'var(--accent-cyan)' }}>₹{Number(subtask.planned_budget || 0).toLocaleString()}</td>
+                                    <td style={{ color: 'var(--accent-amber)' }}>₹{Number(subtask.required_till_now || 0).toLocaleString()}</td>
+                                    <td>₹{Number(subtask.remaining_budget || 0).toLocaleString()}</td>
+                                    <td>{Number(subtask.budget_utilization_pct || 0)}%</td>
+                                    <td>{Number(subtask.progress_pct || 0)}%</td>
                                     <td>
-                                      {isSubOverBudget ? (
-                                        <span className="tag-badge tag-danger" style={{ fontSize: '0.7rem' }}>
-                                          OVER BUDGET: ₹{Math.abs(subtask.remaining_budget).toLocaleString()}
-                                        </span>
-                                      ) : (
-                                        <span style={{ fontWeight: 600, color: '#10b981' }}>
-                                          ₹{Number(subtask.remaining_budget || 0).toLocaleString()}
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td>
-                                      <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{subtask.budget_utilization_pct || 0}%</span>
-                                    </td>
-                                    <td>
-                                      <span style={{ fontWeight: 600, fontSize: '0.8rem', color: '#10b981' }}>{subtask.progress_pct}%</span>
-                                    </td>
-                                    <td>
-                                      <span className={`tag-badge ${
-                                        subtask.status === 'completed' ? 'tag-success' :
-                                        subtask.status === 'in_progress' ? 'tag-info' : 'tag-warning'
-                                      }`}>
-                                        {(subtask.status || 'not_started').replace('_', ' ').toUpperCase()}
+                                      <span className={`tag-badge ${subStatusInfo.tagClass}`}>
+                                        {subStatusInfo.label}
                                       </span>
                                     </td>
                                     <td style={{ textAlign: 'right' }}>
                                       <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
-                                        <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', borderColor: '#10b981', color: '#10b981' }} onClick={() => handleOpenEditModal(subtask, phase.title, task.title)}>
-                                          <Edit3 size={12} /> Edit / Update
+                                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleOpenEditModal(subtask, phase.title, task.title)}>
+                                          <Edit3 size={12} /> Edit
                                         </button>
-                                        <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', borderColor: '#f43f5e', color: '#f43f5e' }} onClick={() => handleDeleteTask(subtask.id, subtask.title, false)}>
+                                        <button type="button" className="btn btn-danger btn-sm" onClick={() => handleDeleteTask(subtask.id, subtask.title, false)}>
                                           <Trash2 size={12} />
                                         </button>
                                       </div>
                                     </td>
                                   </tr>
-                                </React.Fragment>
-                              );
-                            })}
-                          </React.Fragment>
-                        );
-                      })}
-                    </React.Fragment>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                                );
+                              })}
+                            </React.Fragment>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* 2. VIEW 2: INTERACTIVE GANTT TIMELINE SCHEDULE CHART */}
+      {activeView === 'gantt' && (
+        <div className="glass-card" style={{ marginBottom: '2rem' }}>
+          <div className="card-header">
+            <div className="card-title">
+              <BarChart3 size={18} color="var(--accent-cyan)" /> Interactive Gantt Schedule Timeline
+            </div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              Project Schedule Baseline vs Physical Progress Overlay
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <div style={{ minWidth: '940px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '260px repeat(12, 1fr)', background: 'rgba(8,14,30,0.95)', borderBottom: '1px solid var(--border-color)', padding: '0.65rem 0', fontWeight: 700, fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <div style={{ paddingLeft: '1rem' }}>WBS Activity</div>
+                {timelineMonths.map((m, idx) => (
+                  <div key={idx} style={{ textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.05)' }}>{m}</div>
+                ))}
+              </div>
+
+              {treeData.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2.5rem' }}>
+                  No active tasks to display in Gantt chart.
+                </div>
+              ) : (
+                treeData.map((phase) => (
+                  <React.Fragment key={`gantt-phase-${phase.id}`}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '260px repeat(12, 1fr)', padding: '0.75rem 0', borderBottom: '1px solid var(--border-color)', background: 'rgba(99,102,241,0.04)', alignItems: 'center' }}>
+                      <div style={{ paddingLeft: '1rem', fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span className="tag-badge tag-info" style={{ fontSize: '0.65rem' }}>Phase</span>
+                        <span>{phase.title}</span>
+                      </div>
+                      <div style={{ gridColumn: '2 / span 12', padding: '0 0.5rem', position: 'relative' }}>
+                        <div style={{ position: 'relative', height: '22px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--primary-border)' }}>
+                          <div
+                            style={{
+                              width: `${Math.max(5, phase.progress_pct)}%`,
+                              height: '100%',
+                              background: 'linear-gradient(90deg, var(--primary), var(--accent-cyan))',
+                              borderRadius: '3px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              paddingLeft: '0.5rem',
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              color: '#ffffff'
+                            }}
+                          >
+                            {phase.progress_pct}%
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {phase.tasks.map((task) => (
+                      <div key={`gantt-task-${task.id}`} style={{ display: 'grid', gridTemplateColumns: '260px repeat(12, 1fr)', padding: '0.6rem 0', borderBottom: '1px solid var(--border-color)', alignItems: 'center' }}>
+                        <div style={{ paddingLeft: '2rem', fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <span style={{ color: 'var(--text-muted)' }}>├──</span>
+                          <span>{task.title}</span>
+                        </div>
+                        <div style={{ gridColumn: '2 / span 12', padding: '0 0.5rem', position: 'relative' }}>
+                          <div style={{ position: 'relative', height: '18px', background: 'rgba(255,255,255,0.04)', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+                            <div
+                              style={{
+                                width: `${Math.max(4, task.progress_pct)}%`,
+                                height: '100%',
+                                background: task.status === 'completed' ? 'var(--accent-emerald)' : 'var(--accent-amber)',
+                                borderRadius: '3px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                paddingLeft: '0.4rem',
+                                fontSize: '0.68rem',
+                                fontWeight: 700,
+                                color: '#ffffff'
+                              }}
+                            >
+                              {task.progress_pct}%
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </React.Fragment>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CREATE MODAL */}
       {showCreateModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="glass-card" style={{ width: '540px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div className="glass-card" style={{ width: '540px', background: '#0f172a', border: '1px solid var(--border-color-hover)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Plus size={20} color="#38bdf8" /> Add New WBS Item
+                <Plus size={20} color="var(--primary)" /> Add New WBS Item
               </h3>
-              <button className="btn btn-secondary" style={{ padding: '0.2rem 0.5rem' }} onClick={() => setShowCreateModal(false)}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowCreateModal(false)}>
                 <X size={16} />
               </button>
             </div>
 
             {formError && (
-              <div style={{ padding: '0.6rem 0.8rem', background: 'rgba(244,63,94,0.15)', border: '1px solid rgba(244,63,94,0.3)', borderRadius: '6px', color: '#fca5a5', fontSize: '0.82rem', marginBottom: '1rem' }}>
+              <div style={{ padding: '0.6rem 0.8rem', background: 'var(--status-danger-bg)', border: '1px solid var(--status-danger-border)', borderRadius: '6px', color: 'var(--status-danger-text)', fontSize: '0.82rem', marginBottom: '1rem' }}>
                 ⚠️ {formError}
               </div>
             )}
 
             <form onSubmit={handleCreateSubmit}>
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label>WBS Item Level <span style={{ color: '#f43f5e' }}>*</span></label>
-                <select 
-                  className="form-control"
-                  value={formData.item_type}
-                  onChange={e => setFormData({ ...formData, item_type: e.target.value })}
-                >
+              <div className="form-group">
+                <label>WBS Item Level</label>
+                <select className="form-select" value={formData.item_type} onChange={e => setFormData({ ...formData, item_type: e.target.value })}>
                   <option value="Phase">Phase (Top-Level Category)</option>
                   <option value="Task">Task (Under a Phase)</option>
                   <option value="Subtask">Subtask (Under a Task)</option>
@@ -732,14 +684,9 @@ export default function WbsGantt() {
               </div>
 
               {formData.item_type === 'Task' && (
-                <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label>Parent Phase <span style={{ color: '#f43f5e' }}>*</span></label>
-                  <select 
-                    required
-                    className="form-control"
-                    value={formData.parent_phase_id}
-                    onChange={e => setFormData({ ...formData, parent_phase_id: e.target.value })}
-                  >
+                <div className="form-group">
+                  <label>Parent Phase</label>
+                  <select required className="form-select" value={formData.parent_phase_id} onChange={e => setFormData({ ...formData, parent_phase_id: e.target.value })}>
                     <option value="">-- Select Parent Phase --</option>
                     {availablePhases.map(p => (
                       <option key={p.id} value={p.id}>{p.title}</option>
@@ -750,29 +697,18 @@ export default function WbsGantt() {
 
               {formData.item_type === 'Subtask' && (
                 <>
-                  <div className="form-group" style={{ marginBottom: '1rem' }}>
-                    <label>Parent Phase <span style={{ color: '#f43f5e' }}>*</span></label>
-                    <select 
-                      required
-                      className="form-control"
-                      value={formData.parent_phase_id}
-                      onChange={e => setFormData({ ...formData, parent_phase_id: e.target.value, parent_task_id: '' })}
-                    >
+                  <div className="form-group">
+                    <label>Parent Phase</label>
+                    <select required className="form-select" value={formData.parent_phase_id} onChange={e => setFormData({ ...formData, parent_phase_id: e.target.value, parent_task_id: '' })}>
                       <option value="">-- Select Parent Phase --</option>
                       {availablePhases.map(p => (
                         <option key={p.id} value={p.id}>{p.title}</option>
                       ))}
                     </select>
                   </div>
-
-                  <div className="form-group" style={{ marginBottom: '1rem' }}>
-                    <label>Parent Task <span style={{ color: '#f43f5e' }}>*</span></label>
-                    <select 
-                      required
-                      className="form-control"
-                      value={formData.parent_task_id}
-                      onChange={e => setFormData({ ...formData, parent_task_id: e.target.value })}
-                    >
+                  <div className="form-group">
+                    <label>Parent Task</label>
+                    <select required className="form-select" value={formData.parent_task_id} onChange={e => setFormData({ ...formData, parent_task_id: e.target.value })}>
                       <option value="">-- Select Parent Task --</option>
                       {availableTasks.map(t => (
                         <option key={t.id} value={t.id}>{t.title}</option>
@@ -782,67 +718,34 @@ export default function WbsGantt() {
                 </>
               )}
 
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label>Title / Name <span style={{ color: '#f43f5e' }}>*</span></label>
-                <input
-                  required
-                  type="text"
-                  className="form-control"
-                  placeholder="e.g. Columns, Beam Reinforcement"
-                  value={formData.title}
-                  onChange={e => setFormData({ ...formData, title: e.target.value })}
-                />
+              <div className="form-group">
+                <label>Title / Name</label>
+                <input required type="text" className="form-control" placeholder="e.g. Substructure Execution Phase" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label>Assigned Contractor</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="e.g. Apex Steel Inc. or In-House"
-                    value={formData.contractor_name}
-                    onChange={e => setFormData({ ...formData, contractor_name: e.target.value })}
-                  />
+                  <input type="text" className="form-control" placeholder="e.g. Civil Works Corp" value={formData.contractor_name} onChange={e => setFormData({ ...formData, contractor_name: e.target.value })} />
                 </div>
                 <div className="form-group">
                   <label>Planned Budget (₹)</label>
-                  <input
-                    required
-                    type="number"
-                    step="1"
-                    className="form-control"
-                    placeholder="500000"
-                    value={formData.planned_budget}
-                    onChange={e => setFormData({ ...formData, planned_budget: e.target.value })}
-                  />
+                  <input required type="number" step="1" className="form-control" placeholder="500000" value={formData.planned_budget} onChange={e => setFormData({ ...formData, planned_budget: e.target.value })} />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
-                  <label>Start Date <span style={{ color: '#f43f5e' }}>*</span></label>
-                  <input
-                    required
-                    type="date"
-                    className="form-control"
-                    value={formData.start_date}
-                    onChange={e => setFormData({ ...formData, start_date: e.target.value })}
-                  />
+                  <label>Start Date</label>
+                  <input required type="date" className="form-control" value={formData.start_date} onChange={e => setFormData({ ...formData, start_date: e.target.value })} />
                 </div>
                 <div className="form-group">
-                  <label>End Date <span style={{ color: '#f43f5e' }}>*</span></label>
-                  <input
-                    required
-                    type="date"
-                    className="form-control"
-                    value={formData.end_date}
-                    onChange={e => setFormData({ ...formData, end_date: e.target.value })}
-                  />
+                  <label>Target End Date</label>
+                  <input required type="date" className="form-control" value={formData.end_date} onChange={e => setFormData({ ...formData, end_date: e.target.value })} />
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Save {formData.item_type}</button>
               </div>
@@ -854,134 +757,70 @@ export default function WbsGantt() {
       {/* EDIT / UPDATE MODAL FOR PHASE, TASK, & SUBTASK */}
       {editModalItem && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="glass-card" style={{ width: '560px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.6rem' }}>
+          <div className="glass-card" style={{ width: '560px', background: '#0f172a', border: '1px solid var(--border-color-hover)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.6rem' }}>
               <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
-                <Edit3 size={20} color="#38bdf8" /> Edit {editModalItem.task_level || 'WBS Item'}
+                <Edit3 size={20} color="var(--primary)" /> Edit {editModalItem.task_level || 'WBS Item'}
               </h3>
-              <button className="btn btn-secondary" style={{ padding: '0.2rem 0.5rem' }} onClick={() => setEditModalItem(null)}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditModalItem(null)}>
                 <X size={16} />
               </button>
             </div>
 
-            {/* READ-ONLY HIERARCHY BREADCRUMB */}
-            {(editModalItem.parent_phase_name || editModalItem.parent_task_name) && (
-              <div style={{ padding: '0.5rem 0.75rem', background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '1rem' }}>
-                {editModalItem.parent_phase_name && (
-                  <div>Parent Phase: <strong style={{ color: '#38bdf8' }}>{editModalItem.parent_phase_name}</strong> (Read-Only)</div>
-                )}
-                {editModalItem.parent_task_name && (
-                  <div style={{ marginTop: '0.2rem' }}>Parent Task: <strong style={{ color: '#f59e0b' }}>{editModalItem.parent_task_name}</strong> (Read-Only)</div>
-                )}
-              </div>
-            )}
-
-            {editFormError && (
-              <div style={{ padding: '0.6rem 0.8rem', background: 'rgba(244,63,94,0.15)', border: '1px solid rgba(244,63,94,0.3)', borderRadius: '6px', color: '#fca5a5', fontSize: '0.82rem', marginBottom: '1rem' }}>
-                ⚠️ {editFormError}
-              </div>
-            )}
-
             <form onSubmit={handleEditSubmit}>
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                  {(editModalItem.task_level || 'Item')} Name <span style={{ color: '#f43f5e' }}>*</span>
-                </label>
-                <input
-                  required
-                  type="text"
-                  className="form-control"
-                  value={editFormData.title}
-                  onChange={e => setEditFormData({ ...editFormData, title: e.target.value })}
-                />
+              <div className="form-group">
+                <label>Item Name</label>
+                <input required type="text" className="form-control" value={editFormData.title} onChange={e => setEditFormData({ ...editFormData, title: e.target.value })} />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Assigned Contractor</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={editFormData.contractor_name}
-                    onChange={e => setEditFormData({ ...editFormData, contractor_name: e.target.value })}
-                  />
+                  <label>Assigned Contractor</label>
+                  <input type="text" className="form-control" value={editFormData.contractor_name} onChange={e => setEditFormData({ ...editFormData, contractor_name: e.target.value })} />
                 </div>
                 <div className="form-group">
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Planned Budget (₹) <span style={{ color: '#f43f5e' }}>*</span></label>
-                  <input
-                    required
-                    type="number"
-                    step="1"
-                    className="form-control"
-                    value={editFormData.planned_budget}
-                    onChange={e => setEditFormData({ ...editFormData, planned_budget: e.target.value })}
-                  />
+                  <label>Planned Budget (₹)</label>
+                  <input required type="number" step="1" className="form-control" value={editFormData.planned_budget} onChange={e => setEditFormData({ ...editFormData, planned_budget: e.target.value })} />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Start Date <span style={{ color: '#f43f5e' }}>*</span></label>
-                  <input
-                    required
-                    type="date"
-                    className="form-control"
-                    value={editFormData.start_date}
-                    onChange={e => setEditFormData({ ...editFormData, start_date: e.target.value })}
-                  />
+                  <label>Start Date</label>
+                  <input required type="date" className="form-control" value={editFormData.start_date} onChange={e => setEditFormData({ ...editFormData, start_date: e.target.value })} />
                 </div>
                 <div className="form-group">
-                  <label style={{ fontSize: '0.8rem', color: '#94a3b8' }}>End Date <span style={{ color: '#f43f5e' }}>*</span></label>
-                  <input
-                    required
-                    type="date"
-                    className="form-control"
-                    value={editFormData.end_date}
-                    onChange={e => setEditFormData({ ...editFormData, end_date: e.target.value })}
-                  />
+                  <label>End Date</label>
+                  <input required type="date" className="form-control" value={editFormData.end_date} onChange={e => setEditFormData({ ...editFormData, end_date: e.target.value })} />
                 </div>
               </div>
 
-              {/* PROGRESS % & CALCULATED STATUS SECTION */}
-              <div style={{ padding: '0.85rem', background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', marginBottom: '1.25rem' }}>
+              <div style={{ padding: '0.85rem', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '1.25rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#f8fafc', margin: 0 }}>
-                    Progress: <span style={{ color: '#10b981' }}>{editModalItem.isCalculated ? editModalItem.progress_pct : editFormData.progress_pct}%</span>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                    Progress: <span style={{ color: 'var(--accent-emerald)' }}>{editModalItem.isCalculated ? Number(editModalItem.progress_pct || 0) : Number(editFormData.progress_pct || 0)}%</span>
                   </label>
-                  <span className={`tag-badge ${getDerivedStatusInfo(editModalItem.isCalculated ? editModalItem.progress_pct : editFormData.progress_pct).tagClass}`}>
-                    Status: {getDerivedStatusInfo(editModalItem.isCalculated ? editModalItem.progress_pct : editFormData.progress_pct).label}
+                  <span className={`tag-badge ${getDerivedStatusInfo(editModalItem, editFormData.progress_pct).tagClass}`}>
+                    Status: {getDerivedStatusInfo(editModalItem, editFormData.progress_pct).label}
                   </span>
                 </div>
 
-                {editModalItem.isCalculated ? (
-                  <div style={{ fontSize: '0.78rem', color: '#f59e0b', fontStyle: 'italic' }}>
-                    • Calculated automatically from {(editModalItem.task_level || '').toLowerCase() === 'phase' ? 'Tasks' : 'Subtasks'}
-                  </div>
-                ) : (
-                  <div>
-                    <input 
-                      type="range" 
-                      min="0" 
-                      max="100" 
-                      step="5" 
-                      style={{ width: '100%', accentColor: '#10b981', cursor: 'pointer' }} 
-                      value={editFormData.progress_pct} 
-                      onChange={e => setEditFormData({ ...editFormData, progress_pct: e.target.value })} 
-                    />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#64748b', marginTop: '0.2rem' }}>
-                      <span>0% (Not Started)</span>
-                      <span>50% (In Progress)</span>
-                      <span>100% (Completed)</span>
-                    </div>
-                  </div>
+                {!editModalItem.isCalculated && (
+                  <input 
+                    type="range" 
+                    min="0" 
+                    max="100" 
+                    step="5" 
+                    style={{ width: '100%', accentColor: 'var(--accent-emerald)', cursor: 'pointer' }} 
+                    value={editFormData.progress_pct} 
+                    onChange={e => setEditFormData({ ...editFormData, progress_pct: e.target.value })} 
+                  />
                 )}
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setEditModalItem(null)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #38bdf8, #0284c7)' }}>
-                  Save Changes
-                </button>
+                <button type="submit" className="btn btn-primary">Save Changes</button>
               </div>
             </form>
           </div>

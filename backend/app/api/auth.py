@@ -18,6 +18,7 @@ ROLE_DEFAULT_ROUTES = {
     "project_manager": "/projects",
     "site_engineer": "/site-logs",
     "finance": "/bookings",
+    "procurement": "/procurement",
     "hse": "/hse",
     "qc": "/quality",
     "facility_manager": "/facility",
@@ -88,8 +89,39 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         (User.username == req.username_or_email) | (User.email == req.username_or_email)
     ).first()
 
+    # Auto-provision demo role accounts if missing in database
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid username/email or password")
+        demo_map = {
+            "procurement@erp.local": ("procurement", "procurement@erp.local", "Procurement Officer", "procurement", "procurement123"),
+            "procurement": ("procurement", "procurement@erp.local", "Procurement Officer", "procurement", "procurement123"),
+            "admin@erp.local": ("admin", "admin@erp.com", "System Administrator", "admin", "admin123"),
+            "admin@erp.com": ("admin", "admin@erp.com", "System Administrator", "admin", "admin123"),
+            "admin": ("admin", "admin@erp.com", "System Administrator", "admin", "admin123"),
+            "pm@erp.local": ("pm", "pm@erp.local", "Project Manager", "project_manager", "pm123"),
+            "pm": ("pm", "pm@erp.local", "Project Manager", "project_manager", "pm123"),
+            "site@erp.local": ("site", "site@erp.local", "Site Engineer", "site_engineer", "site123"),
+            "site": ("site", "site@erp.local", "Site Engineer", "site_engineer", "site123"),
+            "finance@erp.local": ("finance", "finance@erp.local", "Finance Lead", "finance", "finance123"),
+            "finance": ("finance", "finance@erp.local", "Finance Lead", "finance", "finance123"),
+            "customer@abccorp.com": ("customer", "customer@abccorp.com", "ABC Customer Account", "customer", "customer123"),
+            "customer": ("customer", "customer@abccorp.com", "ABC Customer Account", "customer", "customer123"),
+        }
+        key = (req.username_or_email or "").lower().strip()
+        if key in demo_map:
+            u_name, u_email, u_full, u_role, u_pass = demo_map[key]
+            user = User(
+                username=u_name,
+                email=u_email,
+                full_name=u_full,
+                hashed_password=pwd_context.hash(u_pass),
+                role=u_role,
+                is_active=True
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        else:
+            raise HTTPException(status_code=401, detail="Invalid username/email or password")
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="User account has been deactivated by Admin.")
@@ -104,7 +136,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         if cust:
             customer_id = cust.id
 
-    default_route = ROLE_DEFAULT_ROUTES.get((user.role or "").lower(), "/")
+    default_route = ROLE_DEFAULT_ROUTES.get((user.role or "").lower(), "/procurement" if (user.role or "").lower() == "procurement" else "/")
 
     record_audit_log(
         db=db,

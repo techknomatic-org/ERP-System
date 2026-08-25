@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, User, Key, Building2, ShieldCheck, ArrowRight, HardHat, FileText, DollarSign, ClipboardList } from 'lucide-react';
+import { Lock, User, Key, Building2, ShieldCheck, ArrowRight, HardHat, FileText, DollarSign, ClipboardList, ShoppingCart } from 'lucide-react';
 import { authService } from '../services/api';
+import { DEMO_ROLES } from '../config/roles';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ export default function Login() {
         const roleStr = (user.role || '').toLowerCase();
         const defaultRoute = user.default_route || (
           roleStr.includes('customer') ? '/portal' :
+          roleStr.includes('procurement') ? '/procurement' :
           roleStr.includes('project') || roleStr.includes('pm') ? '/projects' :
           roleStr.includes('site') ? '/site-logs' :
           roleStr.includes('finance') ? '/bookings' :
@@ -44,7 +46,11 @@ export default function Login() {
   };
 
   const handleQuickFill = (userType) => {
-    if (userType === 'admin') {
+    const demo = DEMO_ROLES.find(r => r.userType === userType || r.id === userType);
+    if (demo) {
+      setUsernameOrEmail(demo.email);
+      setPassword(demo.pass);
+    } else if (userType === 'admin') {
       setUsernameOrEmail('admin@erp.local');
       setPassword('admin123');
     } else if (userType === 'pm') {
@@ -56,15 +62,30 @@ export default function Login() {
     } else if (userType === 'finance') {
       setUsernameOrEmail('finance@erp.local');
       setPassword('finance123');
+    } else if (userType === 'procurement') {
+      setUsernameOrEmail('procurement@erp.local');
+      setPassword('procurement123');
     } else if (userType === 'customer') {
       setUsernameOrEmail('customer@abccorp.com');
       setPassword('customer123');
     }
   };
 
+  const getRoleIcon = (userType) => {
+    switch (userType) {
+      case 'admin': return <ShieldCheck size={13} color="#6366f1" />;
+      case 'pm': case 'project_manager': return <HardHat size={13} color="#f59e0b" />;
+      case 'site': case 'site_engineer': return <ClipboardList size={13} color="#38bdf8" />;
+      case 'finance': return <DollarSign size={13} color="#06b6d4" />;
+      case 'procurement': return <ShoppingCart size={13} color="#818cf8" />;
+      case 'customer': return <User size={13} color="#10b981" />;
+      default: return <User size={13} color="#94a3b8" />;
+    }
+  };
+
   return (
     <div style={{ minHeight: '100vh', background: 'radial-gradient(circle at top right, #1e293b, #0f172a)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
-      <div className="glass-card" style={{ width: '480px', background: '#1e293b', padding: '2rem', border: '1px solid rgba(255,255,255,0.12)' }}>
+      <div className="glass-card" style={{ width: '520px', background: '#1e293b', padding: '2rem', border: '1px solid rgba(255,255,255,0.12)' }}>
         {/* Header Branding */}
         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '54px', height: '54px', borderRadius: '16px', background: 'linear-gradient(135deg, #38bdf8, #6366f1)', marginBottom: '0.75rem' }}>
@@ -81,51 +102,24 @@ export default function Login() {
           <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#38bdf8', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             TEST DEMO ROLE CREDENTIALS:
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ fontSize: '0.75rem', justifyContent: 'center', padding: '0.35rem' }}
-              onClick={() => handleQuickFill('admin')}
-            >
-              <ShieldCheck size={13} color="#6366f1" /> System Admin
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ fontSize: '0.75rem', justifyContent: 'center', padding: '0.35rem' }}
-              onClick={() => handleQuickFill('pm')}
-            >
-              <HardHat size={13} color="#f59e0b" /> Project Manager
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ fontSize: '0.75rem', justifyContent: 'center', padding: '0.35rem' }}
-              onClick={() => handleQuickFill('site')}
-            >
-              <ClipboardList size={13} color="#38bdf8" /> Site Engineer
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ fontSize: '0.75rem', justifyContent: 'center', padding: '0.35rem' }}
-              onClick={() => handleQuickFill('finance')}
-            >
-              <DollarSign size={13} color="#06b6d4" /> Finance Lead
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ fontSize: '0.75rem', justifyContent: 'center', padding: '0.35rem', color: '#10b981', borderColor: 'rgba(16,185,129,0.3)' }}
-              onClick={() => handleQuickFill('customer')}
-            >
-              <User size={13} color="#10b981" /> Customer
-            </button>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
+            {DEMO_ROLES.map((role) => (
+              <button
+                key={role.id}
+                type="button"
+                className="btn btn-secondary"
+                style={{ 
+                  fontSize: '0.75rem', 
+                  justify: 'center', 
+                  padding: '0.4rem 0.5rem',
+                  color: role.id === 'procurement' ? '#818cf8' : role.id === 'customer' ? '#10b981' : undefined,
+                  borderColor: role.id === 'procurement' ? 'rgba(129,140,248,0.3)' : role.id === 'customer' ? 'rgba(16,185,129,0.3)' : undefined
+                }}
+                onClick={() => handleQuickFill(role.userType || role.id)}
+              >
+                {getRoleIcon(role.userType || role.id)} {role.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -146,7 +140,7 @@ export default function Login() {
                 type="text"
                 className="form-control"
                 style={{ paddingLeft: '2.4rem' }}
-                placeholder="pm@erp.local or customer@abccorp.com"
+                placeholder="procurement@erp.local, pm@erp.local..."
                 value={usernameOrEmail}
                 onChange={e => setUsernameOrEmail(e.target.value)}
               />
@@ -182,3 +176,4 @@ export default function Login() {
     </div>
   );
 }
+

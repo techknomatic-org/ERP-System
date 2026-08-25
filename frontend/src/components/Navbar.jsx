@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Bell, User, ChevronDown, LogOut } from 'lucide-react';
+import { Search, Bell, User, ChevronDown, LogOut, HardHat, Package, FileText, Layers, X } from 'lucide-react';
 import { systemService, notificationService } from '../services/api';
 
 export default function Navbar() {
@@ -12,7 +12,12 @@ export default function Navbar() {
   const [activeRole, setActiveRole] = useState(localStorage.getItem('erp_role') || 'admin');
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
 
+  // Global Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+
   const dropdownRef = useRef(null);
+  const searchRef = useRef(null);
 
   const loadNotifs = () => {
     notificationService.getUserNotifications(1)
@@ -36,18 +41,20 @@ export default function Navbar() {
     const storedRole = localStorage.getItem('erp_role');
     if (storedRole) setActiveRole(storedRole);
 
-    // Click outside handler
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setShowProfileDropdown(false);
       }
+      if (searchRef.current && !searchRef.current.contains(e.target)) {
+        setIsSearchFocused(false);
+      }
     };
 
-    // Keyboard Escape listener
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         setShowProfileDropdown(false);
         setShowNotifMenu(false);
+        setIsSearchFocused(false);
       }
     };
 
@@ -69,51 +76,157 @@ export default function Navbar() {
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
+  const mockSearchResults = searchQuery.trim().length > 0 ? [
+    { type: 'PROJECTS', label: 'Skyline Commercial Tower - Phase 1', route: '/projects' },
+    { type: 'TASKS', label: 'Earthwork Excavation (Task #102)', route: '/wbs' },
+    { type: 'MATERIALS', label: 'Ready Mix Concrete M30 Grade', route: '/inventory' },
+    { type: 'INVOICES', label: 'Vendor Invoice INV-2024-001 (PO-8001)', route: '/contractor-billing' },
+  ] : [];
+
   return (
-    <header className="navbar" style={{ position: 'relative', zIndex: 9999 }}>
-      <div className="search-box">
-        <Search size={18} color="#64748b" />
+    <header className="navbar">
+      {/* Global Search */}
+      <div className="search-box" ref={searchRef} style={{ position: 'relative' }}>
+        <Search size={16} color="var(--text-muted)" />
         <input
           type="text"
-          placeholder={activeRole === 'site_engineer' ? "Search my sites, tasks, BOQ, logs..." : "Search projects, BOQ, leases, tickets..."}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onFocus={() => setIsSearchFocused(true)}
+          placeholder="Search projects, WBS tasks, BOQ, materials, invoices..."
         />
+        <kbd style={{ fontSize: '0.65rem', background: 'rgba(255,255,255,0.08)', color: 'var(--text-muted)', padding: '0.1rem 0.35rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+          ⌘K
+        </kbd>
+
+        {isSearchFocused && searchQuery.trim().length > 0 && (
+          <div
+            className="glass-card"
+            style={{
+              position: 'absolute',
+              top: '46px',
+              left: 0,
+              width: '420px',
+              background: '#0f172a',
+              zIndex: 99999,
+              padding: '0.75rem',
+              boxShadow: 'var(--shadow-card)',
+              border: '1px solid var(--border-color-hover)'
+            }}
+          >
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.5rem', letterSpacing: '0.05em' }}>
+              SEARCH RESULTS ({mockSearchResults.length})
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              {mockSearchResults.map((res, i) => (
+                <div
+                  key={i}
+                  onClick={() => {
+                    navigate(res.route);
+                    setIsSearchFocused(false);
+                    setSearchQuery('');
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.5rem 0.65rem',
+                    borderRadius: '6px',
+                    background: 'rgba(255,255,255,0.03)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {res.type === 'PROJECTS' ? <HardHat size={14} color="#38bdf8" /> :
+                     res.type === 'TASKS' ? <Layers size={14} color="#fbbf24" /> :
+                     res.type === 'MATERIALS' ? <Package size={14} color="#34d399" /> :
+                     <FileText size={14} color="#818cf8" />}
+                    <span style={{ fontSize: '0.82rem', color: 'var(--text-primary)', fontWeight: 500 }}>{res.label}</span>
+                  </div>
+                  <span className="tag-badge tag-neutral" style={{ fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>
+                    {res.type}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* Header Actions */}
       <div className="nav-actions">
-        <div className={`badge-status ${dbStatus === 'connected' ? 'badge-online' : 'tag-warning'}`}>
-          <span className="badge-dot" />
-          <span>{dbStatus === 'connected' ? 'MySQL Connected' : 'MySQL Standby'}</span>
+        {/* DB Connection Status */}
+        <div className={`badge-status ${dbStatus === 'connected' ? '' : 'tag-warning'}`}>
+          <span className="badge-dot"></span>
+          <span>{dbStatus === 'connected' ? 'MySQL Connected' : 'Database Standby'}</span>
         </div>
 
         {/* Notifications Dropdown */}
         <div style={{ position: 'relative' }}>
           <button
-            className="btn btn-secondary"
-            style={{ padding: '0.5rem', borderRadius: '50%', position: 'relative' }}
+            type="button"
+            className="btn btn-secondary btn-icon"
+            style={{ position: 'relative', borderRadius: '50%', width: '38px', height: '38px', padding: 0 }}
             onClick={() => setShowNotifMenu(!showNotifMenu)}
+            title="System Notifications"
           >
-            <Bell size={18} color="#94a3b8" />
+            <Bell size={17} color="var(--text-secondary)" />
             {unreadCount > 0 && (
-              <span style={{ position: 'absolute', top: '-2px', right: '-2px', background: '#f43f5e', color: 'white', borderRadius: '50%', fontSize: '0.65rem', padding: '0.1rem 0.35rem', fontWeight: 700 }}>
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '-2px',
+                  right: '-2px',
+                  background: 'var(--accent-rose)',
+                  color: 'white',
+                  borderRadius: '9999px',
+                  fontSize: '0.65rem',
+                  padding: '0.05rem 0.35rem',
+                  fontWeight: 800
+                }}
+              >
                 {unreadCount}
               </span>
             )}
           </button>
 
           {showNotifMenu && (
-            <div className="glass-card" style={{ position: 'fixed', right: '120px', top: '62px', width: '340px', background: '#1e293b', zIndex: 99999, padding: '1rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.5rem' }}>
-                <strong style={{ fontSize: '0.9rem' }}>System Notifications</strong>
-                <span style={{ fontSize: '0.75rem', color: '#818cf8' }}>{unreadCount} New</span>
+            <div
+              className="glass-card"
+              style={{
+                position: 'fixed',
+                right: '180px',
+                top: '64px',
+                width: '340px',
+                background: '#0f172a',
+                zIndex: 99999,
+                padding: '1rem',
+                boxShadow: 'var(--shadow-card)',
+                border: '1px solid var(--border-color-hover)'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                <strong style={{ fontSize: '0.85rem' }}>Notifications Queue</strong>
+                <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>{unreadCount} Unread</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '240px', overflowY: 'auto' }}>
                 {notifications.length === 0 ? (
-                  <div style={{ fontSize: '0.8rem', color: '#64748b', textAlign: 'center', padding: '1rem' }}>No notifications</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
+                    No pending notifications
+                  </div>
                 ) : (
                   notifications.map((n) => (
-                    <div key={n.id} style={{ padding: '0.5rem', borderRadius: '6px', background: n.is_read ? 'transparent' : 'rgba(99,102,241,0.1)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                      <div style={{ fontWeight: 600, fontSize: '0.8rem', color: '#f8fafc' }}>{n.title}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.2rem' }}>{n.message}</div>
+                    <div
+                      key={n.id}
+                      style={{
+                        padding: '0.55rem',
+                        borderRadius: '6px',
+                        background: n.is_read ? 'transparent' : 'rgba(99,102,241,0.1)',
+                        border: '1px solid var(--border-color)'
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-primary)' }}>{n.title}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>{n.message}</div>
                     </div>
                   ))
                 )}
@@ -122,26 +235,44 @@ export default function Navbar() {
           )}
         </div>
 
-        {/* User Profile Dropdown */}
+        {/* User Profile / Session Menu */}
         <div style={{ position: 'relative' }} ref={dropdownRef}>
           <div
-            style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', padding: '0.3rem 0.6rem', borderRadius: '8px', background: showProfileDropdown ? 'rgba(255,255,255,0.08)' : 'transparent', border: '1px solid rgba(255,255,255,0.05)' }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.65rem',
+              cursor: 'pointer',
+              padding: '0.35rem 0.75rem',
+              borderRadius: '8px',
+              background: showProfileDropdown ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
+              border: '1px solid var(--border-color)'
+            }}
             onClick={() => setShowProfileDropdown(!showProfileDropdown)}
           >
-            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: activeRole === 'customer' ? 'linear-gradient(135deg, #10b981, #06b6d4)' : 'linear-gradient(135deg, #6366f1, #06b6d4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <User size={18} color="white" />
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, var(--primary), var(--accent-cyan))',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <User size={16} color="white" />
             </div>
             <div>
-              <div style={{ fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                Local User <ChevronDown size={14} color="#94a3b8" />
+              <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                Enterprise User <ChevronDown size={13} color="var(--text-muted)" />
               </div>
-              <div style={{ fontSize: '0.7rem', color: activeRole === 'customer' ? '#10b981' : '#38bdf8', textTransform: 'capitalize', fontWeight: 600 }}>
-                Role: {activeRole.replace('_', ' ')}
+              <div style={{ fontSize: '0.68rem', color: 'var(--accent-cyan)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em' }}>
+                {activeRole.replace('_', ' ')}
               </div>
             </div>
           </div>
 
-          {/* Clean User Profile Dropdown */}
           {showProfileDropdown && (
             <div
               className="glass-card"
@@ -149,51 +280,31 @@ export default function Navbar() {
                 position: 'fixed',
                 right: '24px',
                 top: '64px',
-                width: '280px',
-                background: '#1e293b',
+                width: '260px',
+                background: '#0f172a',
                 zIndex: 999999,
                 padding: '1.1rem',
-                boxShadow: '0 25px 30px -5px rgba(0,0,0,0.8), 0 15px 15px -5px rgba(0,0,0,0.5)',
-                border: '1px solid rgba(255,255,255,0.15)',
+                boxShadow: 'var(--shadow-card)',
+                border: '1px solid var(--border-color-hover)',
                 borderRadius: '12px'
               }}
             >
-              {/* Header: User Account Information */}
-              <div style={{ paddingBottom: '0.75rem', marginBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.5px' }}>USER ACCOUNT INFORMATION</div>
-                <div style={{ fontSize: '1rem', fontWeight: 700, color: '#f8fafc', marginTop: '0.2rem' }}>Local User</div>
-                <div style={{ fontSize: '0.8rem', color: activeRole === 'customer' ? '#10b981' : '#38bdf8', fontWeight: 600, marginTop: '0.25rem' }}>
-                  Current Role: {activeRole.replace('_', ' ').toUpperCase()}
+              <div style={{ paddingBottom: '0.75rem', marginBottom: '0.75rem', borderBottom: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.05em' }}>ACTIVE USER SESSION</div>
+                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.15rem' }}>Enterprise User</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--accent-cyan)', fontWeight: 600, marginTop: '0.2rem' }}>
+                  Role: {activeRole.replace('_', ' ').toUpperCase()}
                 </div>
               </div>
 
-              {/* Quick Navigation Links */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <button className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '0.4rem', justifyContent: 'center' }} onClick={() => { setShowProfileDropdown(false); navigate('/sessions'); }}>
-                  Active Sessions
-                </button>
-                <button className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '0.4rem', justifyContent: 'center' }} onClick={() => { setShowProfileDropdown(false); navigate('/settings'); }}>
-                  System Settings
-                </button>
-              </div>
-
-              {/* Logout Button */}
-              <div style={{ paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ paddingTop: '0.25rem' }}>
                 <button
-                  className="btn btn-primary"
-                  style={{
-                    width: '100%',
-                    justify: 'center',
-                    background: 'linear-gradient(135deg, #f43f5e, #e11d48)',
-                    borderColor: '#e11d48',
-                    gap: '0.5rem',
-                    padding: '0.6rem',
-                    fontSize: '0.85rem',
-                    fontWeight: 600
-                  }}
+                  type="button"
+                  className="btn btn-danger"
+                  style={{ width: '100%', justifyContent: 'center', fontSize: '0.82rem' }}
                   onClick={handleLogout}
                 >
-                  <LogOut size={16} /> Logout Session
+                  <LogOut size={15} /> Logout Session
                 </button>
               </div>
             </div>

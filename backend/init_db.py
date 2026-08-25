@@ -46,20 +46,29 @@ def init_tables_and_seed():
 
     db = SessionLocal()
     try:
-        # Seed Admin User if missing
+        # Seed Demo User Accounts
+        demo_users_seed = [
+            ("admin", "admin@erp.local", "System Administrator", "admin", "admin123"),
+            ("pm", "pm@erp.local", "Project Manager", "project_manager", "pm123"),
+            ("site", "site@erp.local", "Site Engineer", "site_engineer", "site123"),
+            ("finance", "finance@erp.local", "Finance Lead", "finance", "finance123"),
+            ("procurement", "procurement@erp.local", "Procurement Officer", "procurement", "procurement123"),
+            ("customer", "customer@abccorp.com", "ABC Customer Account", "customer", "customer123"),
+        ]
+        for uname, uemail, ufull, urole, upass in demo_users_seed:
+            u_obj = db.query(User).filter((User.username == uname) | (User.email == uemail)).first()
+            if not u_obj:
+                u_obj = User(
+                    username=uname,
+                    email=uemail,
+                    full_name=ufull,
+                    hashed_password=pwd_context.hash(upass),
+                    role=urole,
+                    is_active=True
+                )
+                db.add(u_obj)
+        db.commit()
         admin = db.query(User).filter(User.username == "admin").first()
-        if not admin:
-            admin = User(
-                username="admin",
-                email="admin@erp.com",
-                full_name="System Administrator",
-                hashed_password=pwd_context.hash("admin123"),
-                role="admin",
-                is_active=True
-            )
-            db.add(admin)
-            db.commit()
-            db.refresh(admin)
 
         # Seed Customers
         c1 = db.query(Customer).filter(Customer.name == "ABC Corporation").first()
@@ -267,6 +276,14 @@ def init_tables_and_seed():
                 status="pending"
             )
             db.add(app_task)
+            db.commit()
+
+        # Seed Active Vendors
+        if db.query(Vendor).count() == 0:
+            v1 = Vendor(code="V-001", name="ABC Concrete", contact_person="Rajesh Sharma", email="sales@abcconcrete.com", phone="+91 98765 43210", gst_number="27AAAAA0000A1Z5", status="active")
+            v2 = Vendor(code="V-002", name="Apex Structural", contact_person="Anil Kumar", email="info@apexstructural.com", phone="+91 98765 43211", gst_number="27BBBBB0000B1Z6", status="active")
+            v3 = Vendor(code="V-003", name="XYZ Materials", contact_person="Vikram Singh", email="orders@xyzmaterials.com", phone="+91 98765 43212", gst_number="27CCCCC0000C1Z7", status="active")
+            db.add_all([v1, v2, v3])
             db.commit()
 
         print("[+] Seed dataset for PROJ-SKYLINE verified/created successfully!")
