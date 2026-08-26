@@ -77,7 +77,7 @@ export default function Navbar() {
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
   const mockSearchResults = searchQuery.trim().length > 0 ? [
-    { type: 'PROJECTS', label: 'Skyline Commercial Tower - Phase 1', route: '/projects' },
+    { type: 'PROJECTS', label: 'Riverside Commercial Complex – Phase 1', route: '/projects' },
     { type: 'TASKS', label: 'Earthwork Excavation (Task #102)', route: '/wbs' },
     { type: 'MATERIALS', label: 'Ready Mix Concrete M30 Grade', route: '/inventory' },
     { type: 'INVOICES', label: 'Vendor Invoice INV-2024-001 (PO-8001)', route: '/contractor-billing' },

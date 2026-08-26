@@ -40,7 +40,7 @@ def call_openrouter_api(user_prompt: str, active_role: str, erp_context: dict) -
     print(f"[AI REQUEST START] Endpoint: '{OPENROUTER_API_URL}' | Key: '{masked_key}' | Model: '{selected_model}'")
 
     system_instruction = (
-        "You are the Executive AI Assistant for Skyline ERP. "
+        "You are the Executive AI Assistant for Project Flow. "
         "You answer natural-language questions from logged-in ERP users strictly based on the provided ground-truth ERP Database Context JSON below.\n\n"
         "CRITICAL SECURITY & ACCURACY RULES:\n"
         "1. Base all facts, amounts, quantities, statuses, and calculations STRICTLY on the provided ERP JSON data.\n"
@@ -68,8 +68,8 @@ def call_openrouter_api(user_prompt: str, active_role: str, erp_context: dict) -
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://skyline-erp.local",
-        "X-Title": "Skyline ERP Executive AI Assistant"
+        "HTTP-Referer": "https://projectflow.local",
+        "X-Title": "Project Flow Executive AI Assistant"
     }
 
     start_time = time.time()
@@ -882,7 +882,7 @@ async def verify_and_match_ocr(
 
     # Extract PO Ground-Truth Details
     po_vendor_name = po.vendor.name if po.vendor else (vendor_name or "ABC Concrete & Construction Supplies Pvt. Ltd.")
-    po_project_name = po.project.name if po.project else "Skyline Commercial Tower - Phase 1"
+    po_project_name = po.project.name if po.project else "Riverside Commercial Complex – Phase 1"
     po_item_name = po.item_name or (item_description or "Ready Mix Concrete - Grade M30")
     po_qty = float(po.quantity) if po.quantity is not None else 800.0
     po_rate = float(po.unit_price) if po.unit_price is not None else 150.0

@@ -91,7 +91,7 @@ export default function Login() {
           <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '54px', height: '54px', borderRadius: '16px', background: 'linear-gradient(135deg, #38bdf8, #6366f1)', marginBottom: '0.75rem' }}>
             <Building2 size={30} color="white" />
           </div>
-          <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: '#f8fafc' }}>Skyline ERP Portal</h2>
+          <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: '#f8fafc' }}>Project Flow Portal</h2>
           <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>
             Enterprise Construction & Customer Portal Authentication
           </p>

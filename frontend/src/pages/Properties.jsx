@@ -317,7 +317,7 @@ export default function Properties() {
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label>Property Name <span style={{ color: '#f43f5e' }}>*</span></label>
-                <input required type="text" className="form-control" placeholder="Skyline Business Complex" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                <input required type="text" className="form-control" placeholder="Greenfield Business Complex" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -364,7 +364,7 @@ export default function Properties() {
 
               <div className="form-group">
                 <label>Property Code (Optional - Auto-generated if blank)</label>
-                <input type="text" className="form-control" placeholder="PROP-SKYLINE" value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value })} />
+                <input type="text" className="form-control" placeholder="PROP-GREENFIELD" value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value })} />
               </div>
 
               <div className="form-group">

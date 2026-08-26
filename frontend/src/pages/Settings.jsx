@@ -10,7 +10,7 @@ export default function Settings() {
 
   // Settings State
   const [generalConfig, setGeneralConfig] = useState({
-    companyName: 'Skyline Real Estate & Construction ERP',
+    companyName: 'Project Flow Real Estate & Construction ERP',
     currency: 'USD ($)',
     dateFormat: 'DD/MM/YYYY',
     timeZone: 'UTC+05:30 (Asia/Kolkata)'

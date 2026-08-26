@@ -168,11 +168,11 @@ export default function Projects() {
             <form onSubmit={handleCreateProject}>
               <div className="form-group">
                 <label>Project Name</label>
-                <input required type="text" className="form-control" placeholder="Skyline Commercial Tower - Phase 2" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                <input required type="text" className="form-control" placeholder="Riverside Commercial Complex – Phase 2" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
               </div>
               <div className="form-group">
                 <label>Project Code</label>
-                <input required type="text" className="form-control" placeholder="PRJ-SCT-02" value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value })} />
+                <input required type="text" className="form-control" placeholder="PROJ-RIVERSIDE-02" value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value })} />
               </div>
               <div className="form-group">
                 <label>Site Location</label>

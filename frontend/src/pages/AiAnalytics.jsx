@@ -92,7 +92,7 @@ export default function AiAnalytics() {
     po_number: 'PO-8001',
     pr_number: 'PR-101',
     gst_number: '27AAAAA0000A1Z5',
-    project_name: 'Skyline Commercial Tower - Phase 1',
+    project_name: 'Riverside Commercial Complex – Phase 1',
     total_amount: '120000',
     item_description: 'Ready Mix Concrete M30 Grade',
     quantity: '800',

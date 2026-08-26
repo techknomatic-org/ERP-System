@@ -85,7 +85,7 @@ export default function Dashboard() {
       <div className="content-page" style={{ maxWidth: '900px', margin: '0 auto', textAlign: 'center', paddingTop: '3rem' }}>
         <div className="glass-card" style={{ padding: '3rem' }}>
           <Building2 size={48} color="var(--accent-emerald)" style={{ margin: '0 auto 1rem' }} />
-          <h2>Welcome to Skyline Customer Portal</h2>
+          <h2>Welcome to Project Flow Customer Portal</h2>
           <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem', marginBottom: '1.5rem' }}>
             View your unit booking details, payment schedules, construction progress, and documents.
           </p>
@@ -259,7 +259,7 @@ export default function Dashboard() {
               <div className="card-header">
                 <div className="card-title"><ShieldAlert size={18} color="var(--accent-rose)" /> Major Risk Alerts</div>
               </div>
-              <div style={{ fontSize: '0.82rem', color: 'var(--text-primary)', fontWeight: 600 }}>Skyline Commercial Tower - Phase 1</div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-primary)', fontWeight: 600 }}>Riverside Commercial Complex – Phase 1</div>
               <div style={{ fontSize: '0.75rem', color: 'var(--status-danger-text)', marginTop: '0.2rem' }}>
                 Contractor bill discrepancy rate at 25.0%
               </div>

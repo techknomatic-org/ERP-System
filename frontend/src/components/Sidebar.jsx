@@ -318,7 +318,7 @@ export default function Sidebar() {
           </div>
           {!isCollapsed && (
             <div>
-              <div className="brand-name">Skyline ERP</div>
+              <div className="brand-name">Project Flow</div>
               <div
                 style={{
                   fontSize: '0.68rem',

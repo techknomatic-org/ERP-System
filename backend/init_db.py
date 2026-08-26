@@ -81,12 +81,51 @@ def init_tables_and_seed():
             db.add(c2)
         db.commit()
 
-        # Seed Projects
-        proj1 = db.query(Project).filter(Project.code == "PRJ-SCT-01").first()
+        # Migration / Update existing project records if present
+        existing_p1 = db.query(Project).filter((Project.code == "PRJ-SCT-01") | (Project.code == "PROJ-RIVERSIDE") | (Project.name.like("%Skyline Commercial%"))).first()
+        if existing_p1:
+            existing_p1.name = "Riverside Commercial Complex – Phase 1"
+            existing_p1.code = "PROJ-RIVERSIDE"
+            db.commit()
+
+        existing_p2 = db.query(Project).filter((Project.code == "PROJ-SKYLINE") | (Project.code == "PROJ-GREENFIELD") | (Project.name.like("%Skyline Business%"))).first()
+        if existing_p2:
+            existing_p2.name = "Greenfield Business Park"
+            existing_p2.code = "PROJ-GREENFIELD"
+            db.commit()
+
+        existing_prop = db.query(Property).filter((Property.code == "PROP-SKYLINE") | (Property.code == "PROP-GREENFIELD") | (Property.name.like("%Skyline Business%"))).first()
+        if existing_prop:
+            existing_prop.name = "Greenfield Business Complex"
+            existing_prop.code = "PROP-GREENFIELD"
+            db.commit()
+
+        b1_ex = db.query(Building).filter((Building.code == "BLD-TOWER-A") | (Building.code == "BLD-GREENFIELD-A") | (Building.name.like("%Skyline Tower A%"))).first()
+        if b1_ex:
+            b1_ex.name = "Greenfield Tower A"
+            b1_ex.code = "BLD-GREENFIELD-A"
+            db.commit()
+
+        b2_ex = db.query(Building).filter((Building.code == "BLD-TOWER-B") | (Building.code == "BLD-GREENFIELD-B") | (Building.name.like("%Skyline Tower B%"))).first()
+        if b2_ex:
+            b2_ex.name = "Greenfield Tower B"
+            b2_ex.code = "BLD-GREENFIELD-B"
+            db.commit()
+
+        # Update ApprovalTasks title references
+        for app_t in db.query(ApprovalTask).all():
+            if "Skyline Business Tower" in (app_t.title or ""):
+                app_t.title = app_t.title.replace("Skyline Business Tower", "Greenfield Business Park")
+            if "Skyline Commercial Tower" in (app_t.title or ""):
+                app_t.title = app_t.title.replace("Skyline Commercial Tower", "Riverside Commercial Complex – Phase 1")
+        db.commit()
+
+        # Seed Projects if not exist
+        proj1 = db.query(Project).filter(Project.code == "PROJ-RIVERSIDE").first()
         if not proj1:
             proj1 = Project(
-                name="Skyline Commercial Tower - Phase 1 Construction",
-                code="PRJ-SCT-01",
+                name="Riverside Commercial Complex – Phase 1",
+                code="PROJ-RIVERSIDE",
                 client_id=c1.id,
                 manager_id=admin.id,
                 location="700 Financial Way, Austin, TX",
@@ -99,11 +138,11 @@ def init_tables_and_seed():
             )
             db.add(proj1)
 
-        proj2 = db.query(Project).filter(Project.code == "PROJ-SKYLINE").first()
+        proj2 = db.query(Project).filter(Project.code == "PROJ-GREENFIELD").first()
         if not proj2:
             proj2 = Project(
-                name="Skyline Business Tower",
-                code="PROJ-SKYLINE",
+                name="Greenfield Business Park",
+                code="PROJ-GREENFIELD",
                 client_id=c1.id,
                 manager_id=admin.id,
                 location="Financial District Plaza, Central Avenue",
@@ -120,13 +159,13 @@ def init_tables_and_seed():
         if proj2:
             db.refresh(proj2)
 
-        # Seed Property & Buildings & Units for PROJ-SKYLINE
-        prop = db.query(Property).filter(Property.code == "PROP-SKYLINE").first()
+        # Seed Property & Buildings & Units for PROJ-GREENFIELD
+        prop = db.query(Property).filter(Property.code == "PROP-GREENFIELD").first()
         if not prop:
             prop = Property(
                 project_id=proj2.id,
-                name="Skyline Business Complex",
-                code="PROP-SKYLINE",
+                name="Greenfield Business Complex",
+                code="PROP-GREENFIELD",
                 property_type="Commercial",
                 location="Financial District Plaza, Central Avenue",
                 address="Financial District Plaza, Central Avenue",
@@ -141,39 +180,39 @@ def init_tables_and_seed():
             db.refresh(prop)
         else:
             prop.project_id = proj2.id
-            prop.name = "Skyline Business Complex"
+            prop.name = "Greenfield Business Complex"
             prop.property_type = "Commercial"
             prop.location = "Financial District Plaza, Central Avenue"
             prop.status = "Active"
             prop.total_buildings = 2
             db.commit()
 
-        b1 = db.query(Building).filter(Building.code == "BLD-TOWER-A").first()
+        b1 = db.query(Building).filter(Building.code == "BLD-GREENFIELD-A").first()
         if not b1:
-            b1 = Building(property_id=prop.id, name="Skyline Tower A", code="BLD-TOWER-A", building_type="Tower", total_floors=10, status="Active")
+            b1 = Building(property_id=prop.id, name="Greenfield Tower A", code="BLD-GREENFIELD-A", building_type="Tower", total_floors=10, status="Active")
             db.add(b1)
             db.commit()
 
-        b2 = db.query(Building).filter(Building.code == "BLD-TOWER-B").first()
+        b2 = db.query(Building).filter(Building.code == "BLD-GREENFIELD-B").first()
         if not b2:
-            b2 = Building(property_id=prop.id, name="Skyline Tower B", code="BLD-TOWER-B", building_type="Tower", total_floors=12, status="Active")
+            b2 = Building(property_id=prop.id, name="Greenfield Tower B", code="BLD-GREENFIELD-B", building_type="Tower", total_floors=12, status="Active")
             db.add(b2)
             db.commit()
 
-        # Seed Units for Skyline Tower A (Story 3 sample inventory)
+        # Seed Units for Greenfield Tower A (Story 3 sample inventory)
         if b1 and db.query(Unit).filter(Unit.building_id == b1.id).count() == 0:
-            u1 = Unit(building_id=b1.id, unit_number="Office 101", unit_code="U-TOWER-A-101", unit_type="Office", floor_number=1, area_sqft=2500.0, rate_per_sqft=180.0, total_price=450000.0, status="AVAILABLE", facing="North", configuration="Executive Office", description="Prime ground floor office space")
-            u2 = Unit(building_id=b1.id, unit_number="Office 102", unit_code="U-TOWER-A-102", unit_type="Office", floor_number=1, area_sqft=3000.0, rate_per_sqft=190.0, total_price=570000.0, status="AVAILABLE", facing="East", configuration="Corner Suite", description="Spacious corner unit with east view")
-            u3 = Unit(building_id=b1.id, unit_number="Office 103", unit_code="U-TOWER-A-103", unit_type="Office", floor_number=1, area_sqft=1500.0, rate_per_sqft=200.0, total_price=300000.0, status="HELD", facing="North-East", configuration="Standard Suite", description="Temporarily held for client review")
-            u4 = Unit(building_id=b1.id, unit_number="Office 104", unit_code="U-TOWER-A-104", unit_type="Office", floor_number=1, area_sqft=1800.0, rate_per_sqft=210.0, total_price=378000.0, status="BOOKED", facing="South", configuration="Executive Office", description="Booked unit under sales process")
-            u5 = Unit(building_id=b1.id, unit_number="Retail 01", unit_code="U-TOWER-A-R01", unit_type="Retail Shop", floor_number=1, area_sqft=1200.0, rate_per_sqft=250.0, total_price=300000.0, status="SOLD", facing="West", configuration="High-Street Retail", description="Sold retail store location")
+            u1 = Unit(building_id=b1.id, unit_number="Office 101", unit_code="U-GREENFIELD-A-101", unit_type="Office", floor_number=1, area_sqft=2500.0, rate_per_sqft=180.0, total_price=450000.0, status="AVAILABLE", facing="North", configuration="Executive Office", description="Prime ground floor office space")
+            u2 = Unit(building_id=b1.id, unit_number="Office 102", unit_code="U-GREENFIELD-A-102", unit_type="Office", floor_number=1, area_sqft=3000.0, rate_per_sqft=190.0, total_price=570000.0, status="AVAILABLE", facing="East", configuration="Corner Suite", description="Spacious corner unit with east view")
+            u3 = Unit(building_id=b1.id, unit_number="Office 103", unit_code="U-GREENFIELD-A-103", unit_type="Office", floor_number=1, area_sqft=1500.0, rate_per_sqft=200.0, total_price=300000.0, status="HELD", facing="North-East", configuration="Standard Suite", description="Temporarily held for client review")
+            u4 = Unit(building_id=b1.id, unit_number="Office 104", unit_code="U-GREENFIELD-A-104", unit_type="Office", floor_number=1, area_sqft=1800.0, rate_per_sqft=210.0, total_price=378000.0, status="BOOKED", facing="South", configuration="Executive Office", description="Booked unit under sales process")
+            u5 = Unit(building_id=b1.id, unit_number="Retail 01", unit_code="U-GREENFIELD-A-R01", unit_type="Retail Shop", floor_number=1, area_sqft=1200.0, rate_per_sqft=250.0, total_price=300000.0, status="SOLD", facing="West", configuration="High-Street Retail", description="Sold retail store location")
             db.add_all([u1, u2, u3, u4, u5])
             b1.total_units = 5
             if prop:
                 prop.total_units = 5
             db.commit()
 
-        # Seed WBS Tasks for PROJ-SKYLINE
+        # Seed WBS Tasks for PROJ-GREENFIELD
         if proj2 and db.query(WbsTask).filter(WbsTask.project_id == proj2.id).count() == 0:
             # 1. Foundation Phase
             ph_f = WbsTask(project_id=proj2.id, title="Foundation", task_level="Phase", start_date=datetime.utcnow() - timedelta(days=60), end_date=datetime.utcnow() - timedelta(days=10), planned_budget=500000.0, actual_cost=490000.0, progress_pct=100.0, status="completed")
@@ -222,7 +261,7 @@ def init_tables_and_seed():
                 proj2.progress_pct = round(avg_p, 2)
                 db.commit()
 
-        # Seed BOQ Items for PROJ-SKYLINE
+        # Seed BOQ Items for PROJ-GREENFIELD
         if proj2 and db.query(BoqItem).filter(BoqItem.project_id == proj2.id).count() == 0:
             boq1 = BoqItem(project_id=proj2.id, item_name="Cement (PPC Grade 53)", unit="Bags", approved_qty=10000.00, rate=8.50, total_amount=85000.00, contractor_name="Apex Concrete")
             boq2 = BoqItem(project_id=proj2.id, item_name="Reinforcement Steel Fe500", unit="Tonnes", approved_qty=450.00, rate=750.00, total_amount=337500.00, contractor_name="Titan Structural")
@@ -234,7 +273,7 @@ def init_tables_and_seed():
             db.add_all([boq1, boq2, boq3, boq4, boq5, boq6, boq7])
             db.commit()
 
-        # Seed Site Daily Logs & Approval Tasks for PROJ-SKYLINE
+        # Seed Site Daily Logs & Approval Tasks for PROJ-GREENFIELD
         if proj2 and db.query(SiteDailyLog).filter(SiteDailyLog.project_id == proj2.id).count() == 0:
             log1 = SiteDailyLog(
                 project_id=proj2.id,
@@ -268,7 +307,7 @@ def init_tables_and_seed():
 
             # Generate pending ApprovalTask for log2
             app_task = ApprovalTask(
-                title=f"Site Daily Log Approval - Skyline Business Tower ({log2.log_date.strftime('%Y-%m-%d')})",
+                title=f"Site Daily Log Approval - Greenfield Business Park ({log2.log_date.strftime('%Y-%m-%d')})",
                 entity_type="SiteLog",
                 entity_id=log2.id,
                 requester_id=admin.id,
@@ -286,7 +325,7 @@ def init_tables_and_seed():
             db.add_all([v1, v2, v3])
             db.commit()
 
-        print("[+] Seed dataset for PROJ-SKYLINE verified/created successfully!")
+        print("[+] Seed dataset for PROJ-GREENFIELD verified/created successfully!")
     except Exception as e:
         db.rollback()
         print(f"[-] Error seeding database: {e}")

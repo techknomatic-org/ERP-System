@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 def seed_crm():
     db = SessionLocal()
     try:
-        proj = db.query(Project).filter(Project.code == "PROJ-SKYLINE").first()
-        prop = db.query(Property).filter(Property.code == "PROP-SKYLINE").first()
+        proj = db.query(Project).filter(Project.code == "PROJ-GREENFIELD").first()
+        prop = db.query(Property).filter(Property.code == "PROP-GREENFIELD").first()
         admin = db.query(User).filter(User.username == "admin").first()
 
         proj_id = proj.id if proj else None
@@ -65,7 +65,7 @@ def seed_crm():
             db.refresh(l2)
 
             act3 = CrmLeadActivity(lead_id=l2.id, activity_type="CREATE", description="Lead created via Executive Referral")
-            act4 = CrmLeadActivity(lead_id=l2.id, activity_type="SITE_VISIT_SCHEDULED", description="Site Visit scheduled for Skyline Business Complex")
+            act4 = CrmLeadActivity(lead_id=l2.id, activity_type="SITE_VISIT_SCHEDULED", description="Site Visit scheduled for Greenfield Business Complex")
             db.add_all([act3, act4])
 
             sv = CrmSiteVisit(

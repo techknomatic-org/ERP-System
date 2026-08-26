@@ -1,4 +1,4 @@
-// Central Role & RBAC Governance Definition for Skyline ERP
+// Central Role & RBAC Governance Definition for Project Flow
 
 export const ALL_ROLES = [
   { id: 'admin', label: 'System Admin', defaultRoute: '/' },

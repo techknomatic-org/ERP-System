@@ -314,13 +314,13 @@ export default function PropertyDetails() {
 
               <div className="form-group">
                 <label>Building Name <span style={{ color: '#f43f5e' }}>*</span></label>
-                <input required type="text" className="form-control" placeholder="Skyline Tower A" value={buildingForm.name} onChange={e => setBuildingForm({ ...buildingForm, name: e.target.value })} />
+                <input required type="text" className="form-control" placeholder="Greenfield Tower A" value={buildingForm.name} onChange={e => setBuildingForm({ ...buildingForm, name: e.target.value })} />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label>Building Code <span style={{ color: '#f43f5e' }}>*</span></label>
-                  <input required type="text" className="form-control" placeholder="BLD-TOWER-A" value={buildingForm.code} onChange={e => setBuildingForm({ ...buildingForm, code: e.target.value })} />
+                  <input required type="text" className="form-control" placeholder="BLD-GREENFIELD-A" value={buildingForm.code} onChange={e => setBuildingForm({ ...buildingForm, code: e.target.value })} />
                 </div>
 
                 <div className="form-group">
