@@ -4,7 +4,7 @@ from sqlalchemy import func
 from typing import List
 import uuid
 from app.database import get_db
-from app.models import ContractorBill, BoqItem, MeasurementBook, Vendor, ApprovalTask, AuditLog, Notification
+from app.models import ContractorBill, BoqItem, MeasurementBook, Vendor, ApprovalTask, AuditLog, Notification, TechnicalSanction, ProjectEstimate
 from app.schemas import ContractorBillCreate, ContractorBillResponse
 
 router = APIRouter(prefix="/api/contractor-billing", tags=["3-Way Contractor Bill Verification Engine"])
@@ -22,6 +22,35 @@ def submit_contractor_bill(bill_in: ContractorBillCreate, db: Session = Depends(
     vendor = db.query(Vendor).filter(Vendor.id == bill_in.vendor_id).first()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
+
+    # TECHNICAL SANCTION BILLING GATE (Requirement 14)
+    # Any API/service that creates or submits a contractor bill must verify Technical Sanction status = APPROVED
+    approved_ts = db.query(TechnicalSanction).filter(
+        TechnicalSanction.project_id == bill_in.project_id,
+        TechnicalSanction.status == "APPROVED"
+    ).first()
+
+    if not approved_ts:
+        estimate = db.query(ProjectEstimate).filter(
+            ProjectEstimate.project_id == bill_in.project_id,
+            ProjectEstimate.ts_status == "APPROVED"
+        ).first()
+        if not estimate:
+            # Audit log for billing block
+            audit_block = AuditLog(
+                user_id=1,
+                action="BILL_BLOCKED_TS_NOT_APPROVED",
+                entity_type="ContractorBill",
+                entity_id=0,
+                payload=f"Contractor bill creation blocked for Project #{bill_in.project_id}: Technical Sanction not approved."
+            )
+            db.add(audit_block)
+            db.commit()
+
+            raise HTTPException(
+                status_code=400,
+                detail="Bill cannot be raised because Technical Sanction for this estimate has not been approved."
+            )
 
     # 1. Fetch total verified quantity from Measurement Book (MB)
     mb_total_qty = db.query(func.sum(MeasurementBook.measured_qty)).filter(MeasurementBook.boq_item_id == boq.id).scalar() or 0.0

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calculator, Plus, Search, Filter, Save, Send, AlertTriangle, 
-  CheckCircle, AlertCircle, RefreshCw, FileSpreadsheet, Building2, Check, Layers, ChevronRight, Lock, FileCheck, Copy
+  CheckCircle, AlertCircle, RefreshCw, FileSpreadsheet, Building2, Check, Layers, ChevronRight, Lock, FileCheck, Copy, ShieldCheck, XCircle
 } from 'lucide-react';
-import { projectService, sorService, estimationService } from '../services/api';
+import { projectService, sorService, estimationService, nonSorService, technicalSanctionService } from '../services/api';
 import EmptyState from '../components/EmptyState';
 
 export default function ProjectEstimation() {
@@ -13,6 +13,7 @@ export default function ProjectEstimation() {
 
   // Active SOR Items for Dropdown
   const [sorMasterList, setSorMasterList] = useState([]);
+  const [approvedNonSorList, setApprovedNonSorList] = useState([]);
 
   // Estimate State
   const [estimateData, setEstimateData] = useState(null);
@@ -28,6 +29,16 @@ export default function ProjectEstimation() {
 
   // Review Modal State
   const [showReviewModal, setShowReviewModal] = useState(false);
+
+  // Technical Sanction (PSC-07) State
+  const [latestTs, setLatestTs] = useState(null);
+  const [showTsSubmitModal, setShowTsSubmitModal] = useState(false);
+  const [showTsRejectModal, setShowTsRejectModal] = useState(false);
+  const [tsRemarks, setTsRemarks] = useState('');
+  const [tsRejectionReason, setTsRejectionReason] = useState('');
+  const [submittingTs, setSubmittingTs] = useState(false);
+  const [vacantEeError, setVacantEeError] = useState('');
+  const userRole = (localStorage.getItem('erp_role') || 'admin').toLowerCase().trim();
 
   // Toast Notification State
   const [toast, setToast] = useState(null);
@@ -108,10 +119,19 @@ export default function ProjectEstimation() {
     if (!projId) {
       setEstimateData(null);
       setLineMappings({});
+      setApprovedNonSorList([]);
       return;
     }
 
     setLoadingEstimate(true);
+    nonSorService.getApprovedRates(projId)
+      .then(res => setApprovedNonSorList(res.data || []))
+      .catch(() => setApprovedNonSorList([]));
+
+    technicalSanctionService.getByProject(projId)
+      .then(res => setLatestTs(res.data && res.data.length > 0 ? res.data[0] : null))
+      .catch(() => setLatestTs(null));
+
     estimationService.getEstimateByProject(projId)
       .then((res) => {
         const est = res.data;
@@ -292,7 +312,32 @@ export default function ProjectEstimation() {
     });
   };
 
-  // Handle Justification Note Change
+  // Handle Selection of Approved Non-SOR Market Rate
+  const handleSelectApprovedNonSor = (boqItemId, nonSorIdStr) => {
+    const nonSorId = nonSorIdStr ? parseInt(nonSorIdStr, 10) : null;
+    const selectedItem = approvedNonSorList.find(n => n.id === nonSorId);
+
+    setLineMappings(prev => {
+      const current = prev[boqItemId] || { boq_item_id: boqItemId, quantity: 0 };
+      const qty = parseFloat(current.quantity || 0);
+      const mRate = selectedItem ? selectedItem.market_rate : (current.manual_rate || 0);
+      const estAmt = (mRate !== null && !isNaN(mRate)) ? round(qty * parseFloat(mRate), 2) : 0;
+
+      return {
+        ...prev,
+        [boqItemId]: {
+          ...current,
+          non_sor_id: nonSorIdStr || '',
+          rate_source: "NON_SOR",
+          manual_rate: mRate,
+          is_manual_override: false,
+          estimated_amount: estAmt
+        }
+      };
+    });
+  };
+
+  // Handle Justification Change Change
   const handleJustificationChange = (boqItemId, note) => {
     setLineMappings(prev => {
       const current = prev[boqItemId] || { boq_item_id: boqItemId };
@@ -573,6 +618,86 @@ export default function ProjectEstimation() {
     }
   };
 
+  // Technical Sanction Action Handlers (PSC-07)
+  const handleTsSubmit = async (e) => {
+    if (e) e.preventDefault();
+    if (!estimateData || !selectedProjectId) return;
+    if (liveStats.totalBoq === 0) {
+      showToastNotification("Add at least one item", "error");
+      return;
+    }
+
+    setSubmittingTs(true);
+    setVacantEeError('');
+
+    try {
+      const res = await technicalSanctionService.submit({
+        project_id: parseInt(selectedProjectId, 10),
+        estimate_id: estimateData.id,
+        remarks: tsRemarks
+      });
+      setLatestTs(res.data);
+      setShowTsSubmitModal(false);
+      setTsRemarks('');
+      loadEstimateForProject(selectedProjectId);
+      showToastNotification("Detailed Estimate submitted for Technical Sanction successfully!", "success");
+    } catch (err) {
+      console.error("Error submitting TS:", err);
+      const msg = err.response?.data?.detail || "Failed to submit for Technical Sanction.";
+      if (msg.includes("Sanctioning Authority (EE) is not assigned")) {
+        setVacantEeError(msg);
+      } else {
+        showToastNotification(msg, "error");
+      }
+    } finally {
+      setSubmittingTs(false);
+    }
+  };
+
+  const handleTsApprove = async () => {
+    if (!latestTs) return;
+    setSubmittingTs(true);
+    try {
+      const res = await technicalSanctionService.approve(latestTs.id, { remarks: tsRemarks });
+      setLatestTs(res.data);
+      loadEstimateForProject(selectedProjectId);
+      showToastNotification(`Technical Sanction APPROVED! Ref: ${res.data.sanction_reference_number}`, "success");
+    } catch (err) {
+      console.error("Error approving TS:", err);
+      const msg = err.response?.data?.detail || "Failed to approve Technical Sanction.";
+      showToastNotification(msg, "error");
+      loadEstimateForProject(selectedProjectId);
+    } finally {
+      setSubmittingTs(false);
+    }
+  };
+
+  const handleTsRejectSubmit = async (e) => {
+    if (e) e.preventDefault();
+    if (!latestTs) return;
+
+    if (!tsRejectionReason || !tsRejectionReason.trim()) {
+      showToastNotification("Rejection reason is mandatory.", "error");
+      return;
+    }
+
+    setSubmittingTs(true);
+    try {
+      const res = await technicalSanctionService.reject(latestTs.id, { rejection_reason: tsRejectionReason });
+      setLatestTs(res.data);
+      setShowTsRejectModal(false);
+      setTsRejectionReason('');
+      loadEstimateForProject(selectedProjectId);
+      showToastNotification("Technical Sanction REJECTED / Sent Back to Draft.", "info");
+    } catch (err) {
+      console.error("Error rejecting TS:", err);
+      const msg = err.response?.data?.detail || "Failed to reject Technical Sanction.";
+      showToastNotification(msg, "error");
+    } finally {
+      setSubmittingTs(false);
+    }
+  };
+
   const activeProjectObj = projects.find(p => p.id.toString() === selectedProjectId);
 
   return (
@@ -825,27 +950,128 @@ export default function ProjectEstimation() {
           {/* Card 5: Status */}
           <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
             <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>
-              STATUS / LOCK
+              ESTIMATE STATUS
             </div>
-            <div style={{ marginTop: '0.4rem', display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-              <span 
-                className={`tag-badge ${
-                  liveStats.status === 'APPROVED' ? 'tag-success' :
-                  liveStats.status === 'READY_FOR_REVIEW' ? 'tag-primary' :
-                  liveStats.status === 'PARTIALLY_MAPPED' ? 'tag-warning' : 'tag-secondary'
-                }`}
-                style={{ fontSize: '0.78rem', padding: '0.25rem 0.65rem' }}
-              >
+            <div style={{ marginTop: '0.35rem' }}>
+              <span className={`tag-badge ${
+                liveStats.status === 'APPROVED' ? 'tag-success' :
+                liveStats.status === 'READY_FOR_REVIEW' || liveStats.status === 'SUBMITTED' ? 'tag-warning' :
+                liveStats.status === 'PARTIALLY_MAPPED' ? 'tag-danger' : 'tag-secondary'
+              }`} style={{ fontSize: '0.8rem', fontWeight: 700 }}>
                 {liveStats.status.replace(/_/g, ' ')}
               </span>
-              {liveStats.isLocked && (
-                <span className="tag-badge tag-danger" style={{ fontSize: '0.72rem' }}>
-                  LOCKED
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TECHNICAL SANCTION WORKFLOW CARD (PSC-07) */}
+      {selectedProjectId && estimateData && (
+        <div className="glass-card" style={{ marginBottom: '1.5rem', padding: '1.25rem', borderLeft: '4px solid #818cf8' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '0.85rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <ShieldCheck size={20} color="#818cf8" />
+              <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#f8fafc', fontWeight: 700 }}>
+                TECHNICAL SANCTION WORKFLOW
+              </h3>
+              <span className={`tag-badge ${
+                latestTs?.status === 'APPROVED' ? 'tag-success' :
+                latestTs?.status === 'PENDING_APPROVAL' ? 'tag-warning' :
+                (latestTs?.status === 'REJECTED' || latestTs?.status === 'INVALIDATED') ? 'tag-danger' : 'tag-secondary'
+              }`} style={{ fontSize: '0.78rem', fontWeight: 700 }}>
+                {latestTs?.status === 'PENDING_APPROVAL' ? 'PENDING EE REVIEW' : (latestTs?.status || 'DRAFT').replace(/_/g, ' ')}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.6rem' }}>
+              {/* Submit Button */}
+              {(!latestTs || latestTs.status === 'DRAFT' || latestTs.status === 'REJECTED' || latestTs.status === 'INVALIDATED') && !liveStats.isLocked && (
+                <button
+                  className="btn btn-primary"
+                  onClick={() => setShowTsSubmitModal(true)}
+                  disabled={submittingTs || liveStats.totalBoq === 0}
+                  style={{ fontSize: '0.82rem', padding: '0.4rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: '#6366f1', borderColor: '#6366f1' }}
+                >
+                  <Send size={15} />
+                  <span>Submit for Technical Sanction</span>
+                </button>
+              )}
+
+              {/* EE Approval & Rejection Buttons */}
+              {latestTs && latestTs.status === 'PENDING_APPROVAL' && (
+                <>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleTsApprove}
+                    disabled={submittingTs}
+                    style={{ fontSize: '0.82rem', padding: '0.4rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: '#10b981', borderColor: '#10b981' }}
+                  >
+                    <Check size={15} />
+                    <span>Approve Technical Sanction</span>
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setShowTsRejectModal(true)}
+                    disabled={submittingTs}
+                    style={{ fontSize: '0.82rem', padding: '0.4rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                  >
+                    <XCircle size={15} />
+                    <span>Reject / Send Back</span>
+                  </button>
+                </>
+              )}
+
+              {/* Approved Badge */}
+              {latestTs && latestTs.status === 'APPROVED' && (
+                <span style={{ fontSize: '0.82rem', color: '#10b981', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(16, 185, 129, 0.12)', padding: '0.4rem 0.85rem', borderRadius: '6px' }}>
+                  <CheckCircle size={16} /> Technical Sanction Approved
                 </span>
               )}
             </div>
           </div>
 
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', background: 'rgba(0,0,0,0.2)', padding: '0.85rem 1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div>
+              <span style={{ fontSize: '0.73rem', color: '#94a3b8', display: 'block', fontWeight: 600 }}>SANCTIONING AUTHORITY</span>
+              <span style={{ fontSize: '0.88rem', color: '#cbd5e1', fontWeight: 700 }}>
+                {latestTs ? latestTs.sanctioning_authority_name : "Executive Engineer (Auto-resolved)"}
+              </span>
+            </div>
+            <div>
+              <span style={{ fontSize: '0.73rem', color: '#94a3b8', display: 'block', fontWeight: 600 }}>SANCTION REFERENCE NUMBER</span>
+              <span style={{ fontSize: '0.88rem', color: latestTs?.sanction_reference_number ? '#38bdf8' : '#64748b', fontWeight: 700, fontFamily: 'monospace' }}>
+                {latestTs?.sanction_reference_number || "— (Auto-generated on Approval)"}
+              </span>
+            </div>
+            <div>
+              <span style={{ fontSize: '0.73rem', color: '#94a3b8', display: 'block', fontWeight: 600 }}>SANCTION DATE</span>
+              <span style={{ fontSize: '0.88rem', color: '#cbd5e1', fontWeight: 600 }}>
+                {latestTs?.sanction_date ? new Date(latestTs.sanction_date).toLocaleString('en-IN') : "—"}
+              </span>
+            </div>
+          </div>
+
+          {/* Invalidation Alert Banner */}
+          {latestTs && latestTs.status === 'INVALIDATED' && (
+            <div style={{ marginTop: '0.85rem', color: '#ef4444', fontSize: '0.83rem', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '0.65rem 0.85rem', borderRadius: '6px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <AlertTriangle size={18} />
+              <span>This Technical Sanction request is no longer valid because the Detailed Estimate was changed after submission. Please resubmit the revised estimate for Technical Sanction.</span>
+            </div>
+          )}
+
+          {/* Rejection Reason Banner */}
+          {latestTs && latestTs.status === 'REJECTED' && latestTs.rejection_reason && (
+            <div style={{ marginTop: '0.85rem', color: '#f87171', fontSize: '0.83rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)', padding: '0.65rem 0.85rem', borderRadius: '6px', fontWeight: 600 }}>
+              <strong>Rejection Reason:</strong> {latestTs.rejection_reason}
+            </div>
+          )}
+
+          {/* Vacant EE Inline Error */}
+          {vacantEeError && (
+            <div style={{ marginTop: '0.85rem', color: '#ef4444', fontSize: '0.83rem', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)', padding: '0.65rem 0.85rem', borderRadius: '6px', fontWeight: 600 }}>
+              ⚠ {vacantEeError}
+            </div>
+          )}
         </div>
       )}
 
@@ -972,7 +1198,7 @@ export default function ProjectEstimation() {
                           style={{ fontSize: '0.78rem', padding: '0.3rem 0.4rem', cursor: liveStats.isLocked ? 'default' : 'pointer' }}
                         >
                           <option value="SOR">SOR Rate</option>
-                          <option value="NON_SOR">Non-SOR Rate</option>
+                          <option value="NON_SOR">Market Rate</option>
                           <option value="MANUAL_OVERRIDE">Manual Override</option>
                         </select>
                       </td>
@@ -1010,8 +1236,32 @@ export default function ProjectEstimation() {
                             )}
                           </div>
                         ) : (
-                          <div style={{ fontSize: '0.8rem', color: '#94a3b8', italic: 'true', padding: '0.3rem 0' }}>
-                            Non-SOR Market Rate
+                          <div>
+                            {approvedNonSorList.length > 0 ? (
+                              <select
+                                disabled={liveStats.isLocked}
+                                className="form-control"
+                                value={mapping.non_sor_id || ''}
+                                onChange={(e) => handleSelectApprovedNonSor(line.boq_item_id, e.target.value)}
+                                style={{ 
+                                  fontSize: '0.8rem', 
+                                  padding: '0.3rem 0.5rem',
+                                  borderColor: '#06b6d4',
+                                  cursor: liveStats.isLocked ? 'default' : 'pointer'
+                                }}
+                              >
+                                <option value="">No SOR Match — Select Approved Market Rate</option>
+                                {approvedNonSorList.map(ns => (
+                                  <option key={ns.id} value={ns.id}>
+                                    Market Rate | {ns.item_description} ({ns.unit}) — {formatCurrency(ns.market_rate)}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <div style={{ fontSize: '0.76rem', color: '#f59e0b', padding: '0.2rem 0' }}>
+                                No approved Market Rate. Create & approve Non-SOR Analysis first.
+                              </div>
+                            )}
                           </div>
                         )}
                       </td>
@@ -1079,8 +1329,8 @@ export default function ProjectEstimation() {
                       {/* Status */}
                       <td style={{ textAlign: 'center' }}>
                         {isValid ? (
-                          <span className="tag-badge tag-success" style={{ fontSize: '0.7rem' }}>
-                            {rateSrc === "NON_SOR" ? 'Non-SOR' : (isOverride ? 'Overridden' : 'Mapped')}
+                          <span className={`tag-badge ${rateSrc === "NON_SOR" ? 'tag-primary' : 'tag-success'}`} style={{ fontSize: '0.7rem' }}>
+                            {rateSrc === "NON_SOR" ? 'Market Rate' : (isOverride ? 'Overridden' : 'Mapped')}
                           </span>
                         ) : isSelected && !isCompatible ? (
                           <span className="tag-badge tag-danger" style={{ fontSize: '0.7rem' }}>Unit Mismatch</span>
@@ -1212,7 +1462,7 @@ export default function ProjectEstimation() {
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'center', 
-            zIndex: 1000,
+            zIndex: 1000, 
             padding: '1rem'
           }}
         >
@@ -1279,6 +1529,69 @@ export default function ProjectEstimation() {
                 disabled={saving}
               >
                 {saving ? 'Submitting...' : 'Confirm & Submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Submit for Technical Sanction */}
+      {showTsSubmitModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '520px', background: '#1e293b', border: '1px solid rgba(99, 102, 241, 0.3)', borderRadius: '12px', padding: '1.5rem' }}>
+            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', color: '#818cf8', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <ShieldCheck size={20} /> Submit for Technical Sanction
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '1rem' }}>
+              Submitting Detailed Estimate <strong>{estimateData?.estimate_number}</strong> (Total: {formatCurrency(liveStats.deTotal)}) for statutory Technical Sanction review.
+            </p>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '0.35rem', fontWeight: 600 }}>
+                Sanctioning Authority (Auto-resolved)
+              </label>
+              <input type="text" readOnly className="form-control" value={latestTs ? latestTs.sanctioning_authority_name : "Executive Engineer (Auto-resolved from Workflow Engine)"} style={{ fontSize: '0.85rem', background: 'rgba(255,255,255,0.05)', color: '#94a3b8' }} />
+            </div>
+
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '0.35rem', fontWeight: 600 }}>
+                Submission Remarks (Optional)
+              </label>
+              <textarea className="form-control" rows={3} placeholder="Optional technical sanction submission notes..." value={tsRemarks} onChange={(e) => setTsRemarks(e.target.value)} style={{ fontSize: '0.82rem' }} />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowTsSubmitModal(false)} disabled={submittingTs}>Cancel</button>
+              <button type="button" className="btn btn-primary" onClick={handleTsSubmit} disabled={submittingTs} style={{ background: '#6366f1', borderColor: '#6366f1' }}>
+                {submittingTs ? 'Submitting...' : 'Confirm Submission'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Reject Technical Sanction */}
+      {showTsRejectModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '480px', background: '#1e293b', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '12px', padding: '1.5rem' }}>
+            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.05rem', color: '#f87171', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <XCircle size={18} /> Reject / Send Back Technical Sanction
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '1rem' }}>
+              Rejecting Technical Sanction for estimate <strong>{estimateData?.estimate_number}</strong>. This will return the estimate to DRAFT state for revision.
+            </p>
+
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '0.35rem', fontWeight: 600 }}>
+                Rejection Reason <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <textarea required className="form-control" rows={3} placeholder="Specify mandatory rejection reason..." value={tsRejectionReason} onChange={(e) => setTsRejectionReason(e.target.value)} style={{ fontSize: '0.82rem' }} />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowTsRejectModal(false)} disabled={submittingTs}>Cancel</button>
+              <button type="button" className="btn btn-primary" onClick={handleTsRejectSubmit} disabled={submittingTs || !tsRejectionReason.trim()} style={{ background: '#ef4444', borderColor: '#ef4444' }}>
+                {submittingTs ? 'Rejecting...' : 'Confirm Rejection'}
               </button>
             </div>
           </div>

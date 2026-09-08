@@ -308,6 +308,30 @@ export const estimationService = {
   getEstimatesList: () => api.get('/estimation/list'),
 };
 
+export const nonSorService = {
+  createAnalysis: (data) => api.post('/non-sor-rate-analysis', data),
+  uploadSupportingDocument: (formData) => api.post('/non-sor-rate-analysis/upload-document', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  getAnalysesByProject: (projectId) => api.get(`/non-sor-rate-analysis/project/${projectId}`),
+  getApprovedRates: (projectId) => api.get(`/non-sor-rate-analysis/approved/${projectId}`),
+  getAnalysisById: (id) => api.get(`/non-sor-rate-analysis/${id}`),
+  updateAnalysis: (id, data) => api.put(`/non-sor-rate-analysis/${id}`, data),
+  approveAnalysis: (id) => api.post(`/non-sor-rate-analysis/${id}/approve`),
+  rejectAnalysis: (id, data) => api.post(`/non-sor-rate-analysis/${id}/reject`, data),
+  getReconcileReport: (projectId) => api.get(`/non-sor-rate-analysis/reconcile-report/${projectId}`),
+};
+
+export const technicalSanctionService = {
+  submit: (data) => api.post('/technical-sanctions/submit', data),
+  getByProject: (projectId) => api.get(`/technical-sanctions/project/${projectId}`),
+  getPending: () => api.get('/technical-sanctions/pending'),
+  getById: (id) => api.get(`/technical-sanctions/${id}`),
+  approve: (id, data = {}) => api.post(`/technical-sanctions/${id}/approve`, data),
+  reject: (id, data) => api.post(`/technical-sanctions/${id}/reject`, data),
+};
+
+
 export const contractorAwardsService = {
   getReadyProjects: () => api.get('/contractor-awards/ready-projects'),
   getAwards: (params = {}) => api.get('/contractor-awards', { params }),

@@ -1842,10 +1842,112 @@ class ProjectTeamSummary(BaseModel):
     execution_members: int = 0
 
 
+# --- NON-SOR RATE ANALYSIS SCHEMAS ---
+
+class NonSorAnalysisCreate(BaseModel):
+    project_id: int
+    boq_item_id: Optional[int] = None
+    item_description: str
+    unit: Optional[str] = "Nos"
+    market_rate_source: str  # "Vendor Quotation", "Published Index", "Manual Entry"
+    market_rate: float
+    supporting_document_id: Optional[int] = None
+    analysis_remarks: Optional[str] = None
+
+class NonSorAnalysisUpdate(BaseModel):
+    item_description: Optional[str] = None
+    unit: Optional[str] = None
+    market_rate_source: Optional[str] = None
+    market_rate: Optional[float] = None
+    supporting_document_id: Optional[int] = None
+    analysis_remarks: Optional[str] = None
+
+class NonSorAnalysisApproval(BaseModel):
+    action: str  # "APPROVE" or "REJECT"
+    rejection_reason: Optional[str] = None
+
+class NonSorAnalysisResponse(BaseModel):
+    id: int
+    project_id: int
+    boq_item_id: Optional[int] = None
+    item_description: str
+    unit: Optional[str] = None
+    market_rate_source: str
+    market_rate: float
+    supporting_document_id: Optional[int] = None
+    supporting_document_path: Optional[str] = None
+    supporting_document_name: Optional[str] = None
+    analysis_remarks: Optional[str] = None
+    status: str
+    rate_type: str
+    is_reconciled: bool
+    reconciled_sor_id: Optional[int] = None
+    created_by_id: int
+    created_by_name: Optional[str] = None
+    reviewed_by_id: Optional[int] = None
+    reviewed_by_name: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ReconcileReportItem(BaseModel):
+    id: int
+    project_id: int
+    item_description: str
+    unit: Optional[str] = None
+    market_rate: float
+    market_rate_source: str
+    status: str
+    rate_type: str
+    is_reconciled: bool
+    newer_sor_id: Optional[int] = None
+    newer_sor_code: Optional[str] = None
+    newer_sor_description: Optional[str] = None
+    newer_sor_rate: Optional[float] = None
+    newer_sor_edition: Optional[str] = None
 
 
+# --- TECHNICAL SANCTION SCHEMAS (PSC-07) ---
 
+class TechnicalSanctionSubmitRequest(BaseModel):
+    project_id: int
+    estimate_id: int
+    remarks: Optional[str] = None
 
+class TechnicalSanctionApproveRequest(BaseModel):
+    remarks: Optional[str] = None
 
+class TechnicalSanctionRejectRequest(BaseModel):
+    rejection_reason: str
 
+class TechnicalSanctionResponse(BaseModel):
+    id: int
+    project_id: int
+    detailed_estimate_id: int
+    sanctioning_authority_user_id: Optional[int] = None
+    sanctioning_authority_name: Optional[str] = None
+    sanction_reference_number: Optional[str] = None
+    sanction_date: Optional[datetime] = None
+    remarks: Optional[str] = None
+    status: str
+    rejection_reason: Optional[str] = None
+    submitted_at: datetime
+    submitted_by_id: int
+    submitted_by_name: Optional[str] = None
+    approved_at: Optional[datetime] = None
+    approved_by_id: Optional[int] = None
+    approved_by_name: Optional[str] = None
+    rejected_at: Optional[datetime] = None
+    rejected_by_id: Optional[int] = None
+    rejected_by_name: Optional[str] = None
+    estimate_revision: int
+    estimate_total_at_submission: Optional[float] = None
+    created_at: datetime
+    updated_at: datetime
 
+    class Config:
+        from_attributes = True

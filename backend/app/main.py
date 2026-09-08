@@ -13,6 +13,16 @@ app = FastAPI(
     description="FastAPI Backend for Enterprise Real Estate & Construction ERP System"
 )
 
+from app.db_initializer import auto_init_db
+
+@app.on_event("startup")
+def startup_event():
+    """Run database auto-initialization & column migrations on server startup."""
+    try:
+        auto_init_db()
+    except Exception as e:
+        print(f"[Startup Error] Automatic DB initialization note: {e}")
+
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 from app.api import (
     dashboard, inventory, sales, customers, system, auth, 
@@ -21,7 +31,7 @@ from app.api import (
     projects, wbs, site_logs,
     vendors, boq_mb, contractor_billing,
     hse, quality, facility, tally, ai_analytics,
-    schedule_of_rates, estimation, contractor_awards, work_orders, work_plans, task_assignments, project_teams
+    schedule_of_rates, estimation, contractor_awards, work_orders, work_plans, task_assignments, project_teams, non_sor, technical_sanctions
 )
 
 
@@ -83,6 +93,9 @@ app.include_router(ai_analytics.router)
 # SOR Router
 app.include_router(schedule_of_rates.router)
 
+# Non-SOR Rate Analysis Router (PSC-06)
+app.include_router(non_sor.router)
+
 # Estimation Router
 app.include_router(estimation.router)
 
@@ -100,6 +113,9 @@ app.include_router(task_assignments.router)
 
 # Project Teams Router
 app.include_router(project_teams.router)
+
+# Technical Sanction Router (PSC-07)
+app.include_router(technical_sanctions.router)
 
 
 @app.get("/")

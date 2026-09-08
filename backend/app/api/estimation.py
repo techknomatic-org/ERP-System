@@ -7,7 +7,7 @@ from datetime import datetime
 from app.database import get_db
 from app.models import (
     ProjectEstimate, ProjectEstimateLine, BoqItem, ScheduleOfRates, 
-    Project, AuditLog
+    Project, AuditLog, TechnicalSanction
 )
 from app.schemas import (
     ProjectEstimateResponse, EstimateSaveRequest, 
@@ -448,6 +448,34 @@ def save_estimate(req: EstimateSaveRequest, db: Session = Depends(get_db)):
 
     db.commit()
 
+    # Re-calculate estimate response to finalize totals
+    resp = build_estimate_response(estimate, db)
+
+    # Check if there is a pending Technical Sanction that needs invalidation due to changes (Requirement 11)
+    pending_ts = db.query(TechnicalSanction).filter(
+        TechnicalSanction.detailed_estimate_id == estimate.id,
+        TechnicalSanction.status == "PENDING_APPROVAL"
+    ).first()
+
+    if pending_ts:
+        old_total = round(float(pending_ts.estimate_total_at_submission or 0.0), 2)
+        new_total = round(float(estimate.total_amount or 0.0), 2)
+        if old_total != new_total:
+            pending_ts.status = "INVALIDATED"
+            pending_ts.updated_at = datetime.utcnow()
+            estimate.ts_status = "INVALIDATED"
+            
+            audit_inv = AuditLog(
+                user_id=1,
+                action="INVALIDATE_TECHNICAL_SANCTION",
+                entity_type="TechnicalSanction",
+                entity_id=pending_ts.id,
+                payload=f"Technical Sanction #{pending_ts.id} INVALIDATED because estimate total changed from ₹{old_total} to ₹{new_total} during editing."
+            )
+            db.add(audit_inv)
+            db.commit()
+            resp = build_estimate_response(estimate, db)
+
     # Audit log
     audit = AuditLog(
         user_id=1,
@@ -459,7 +487,7 @@ def save_estimate(req: EstimateSaveRequest, db: Session = Depends(get_db)):
     db.add(audit)
     db.commit()
 
-    return build_estimate_response(estimate, db)
+    return resp
 
 @router.post("/submit-review/{estimate_id}", response_model=ProjectEstimateResponse)
 def submit_estimate_for_review(estimate_id: int, db: Session = Depends(get_db)):

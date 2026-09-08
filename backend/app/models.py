@@ -1114,6 +1114,38 @@ class ProjectEstimateLine(Base):
     boq_item = relationship("BoqItem")
     sor_item = relationship("ScheduleOfRates")
 
+class NonSorRateAnalysis(Base):
+    __tablename__ = "non_sor_rate_analyses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    boq_item_id = Column(Integer, ForeignKey("boq_items.id"), nullable=True)
+    item_description = Column(Text, nullable=False)
+    unit = Column(String(30), nullable=True)
+    market_rate_source = Column(String(50), nullable=False)  # "Vendor Quotation", "Published Index", "Manual Entry"
+    market_rate = Column(Numeric(12, 2), nullable=False)
+    supporting_document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
+    supporting_document_path = Column(Text, nullable=True)
+    supporting_document_name = Column(Text, nullable=True)
+    analysis_remarks = Column(Text, nullable=True)
+    status = Column(String(30), default="PENDING_EE_REVIEW", nullable=False)  # "PENDING_EE_REVIEW", "APPROVED", "REJECTED"
+    rate_type = Column(String(30), default="Market Rate", nullable=False)
+    is_reconciled = Column(Boolean, default=False, nullable=False)
+    reconciled_sor_id = Column(Integer, ForeignKey("schedule_of_rates.id"), nullable=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    reviewed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = relationship("Project")
+    boq_item = relationship("BoqItem")
+    supporting_document = relationship("Document", foreign_keys=[supporting_document_id])
+    created_by = relationship("User", foreign_keys=[created_by_id])
+    reviewed_by = relationship("User", foreign_keys=[reviewed_by_id])
+    reconciled_sor = relationship("ScheduleOfRates", foreign_keys=[reconciled_sor_id])
+
 class ContractorAward(Base):
     __tablename__ = "contractor_awards"
 
@@ -1308,9 +1340,32 @@ class ProjectTeamAudit(Base):
     changed_by = relationship("User", foreign_keys=[changed_by_user_id])
 
 
+class TechnicalSanction(Base):
+    __tablename__ = "technical_sanctions"
 
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)
+    detailed_estimate_id = Column(Integer, ForeignKey("project_estimates.id"), nullable=False, index=True)
+    sanctioning_authority_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    sanction_reference_number = Column(String(100), nullable=True, index=True)
+    sanction_date = Column(DateTime, nullable=True)
+    remarks = Column(Text, nullable=True)
+    status = Column(String(50), default="PENDING_APPROVAL", nullable=False) # DRAFT, PENDING_APPROVAL, APPROVED, REJECTED, INVALIDATED
+    rejection_reason = Column(Text, nullable=True)
+    submitted_at = Column(DateTime, default=datetime.utcnow)
+    submitted_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    approved_at = Column(DateTime, nullable=True)
+    approved_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    rejected_at = Column(DateTime, nullable=True)
+    rejected_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    estimate_revision = Column(Integer, default=0, nullable=False)
+    estimate_total_at_submission = Column(Numeric(14, 2), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-
-
-
-
+    project = relationship("Project")
+    estimate = relationship("ProjectEstimate")
+    sanctioning_authority = relationship("User", foreign_keys=[sanctioning_authority_user_id])
+    submitted_by = relationship("User", foreign_keys=[submitted_by_id])
+    approved_by = relationship("User", foreign_keys=[approved_by_id])
+    rejected_by = relationship("User", foreign_keys=[rejected_by_id])

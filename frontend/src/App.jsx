@@ -13,6 +13,7 @@ import QualityControl from './pages/QualityControl';
 import ContractorBilling from './pages/ContractorBilling';
 import BoqMb from './pages/BoqMb';
 import ScheduleOfRates from './pages/ScheduleOfRates';
+import NonSorRateAnalysis from './pages/NonSorRateAnalysis';
 import ProjectEstimation from './pages/ProjectEstimation';
 import ContractorAwards from './pages/ContractorAwards';
 import WorkOrders from './pages/WorkOrders';
@@ -112,6 +113,7 @@ export default function App() {
           <Route path="/contractor-billing" element={<RoleProtectedRouteGuard path="/contractor-billing"><ContractorBilling /></RoleProtectedRouteGuard>} />
           <Route path="/boq-mb" element={<RoleProtectedRouteGuard path="/boq-mb"><BoqMb /></RoleProtectedRouteGuard>} />
           <Route path="/sor" element={<RoleProtectedRouteGuard path="/sor"><ScheduleOfRates /></RoleProtectedRouteGuard>} />
+          <Route path="/non-sor-rate-analysis" element={<RoleProtectedRouteGuard path="/non-sor-rate-analysis"><NonSorRateAnalysis /></RoleProtectedRouteGuard>} />
           <Route path="/estimation" element={<RoleProtectedRouteGuard path="/estimation"><ProjectEstimation /></RoleProtectedRouteGuard>} />
           <Route path="/contractor-awards" element={<RoleProtectedRouteGuard path="/contractor-awards"><ContractorAwards /></RoleProtectedRouteGuard>} />
           <Route path="/work-orders" element={<RoleProtectedRouteGuard path="/work-orders"><WorkOrders /></RoleProtectedRouteGuard>} />

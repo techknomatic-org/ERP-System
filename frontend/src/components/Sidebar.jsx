@@ -85,6 +85,7 @@ export default function Sidebar() {
         { label: 'Daily Site Logs', icon: ClipboardList, path: '/site-logs' },
         { label: 'BOQ & Measurement Book', icon: FileSpreadsheet, path: '/boq-mb' },
         { label: 'Schedule of Rates', icon: Calculator, path: '/sor' },
+        { label: 'Non-SOR Rate Analysis', icon: Calculator, path: '/non-sor-rate-analysis' },
         { label: 'Project Estimation', icon: DollarSign, path: '/estimation' },
         { label: 'Contractor Awards', icon: Award, path: '/contractor-awards' },
         { label: 'Work Orders', icon: FileCheck, path: '/work-orders' },
@@ -160,6 +161,7 @@ export default function Sidebar() {
         { label: 'PM Dashboard', icon: LayoutDashboard, path: '/' },
         { label: 'Construction Projects', icon: HardHat, path: '/projects' },
         { label: 'Project Estimation', icon: DollarSign, path: '/estimation' },
+        { label: 'Non-SOR Rate Analysis', icon: Calculator, path: '/non-sor-rate-analysis' },
         { label: 'Contractor Awards', icon: Award, path: '/contractor-awards' },
         { label: 'Work Orders', icon: FileCheck, path: '/work-orders' }
       ]
@@ -174,7 +176,8 @@ export default function Sidebar() {
         { label: 'Project Team', icon: Users, path: '/project-team' },
         { label: 'Daily Site Logs', icon: ClipboardList, path: '/site-logs' },
         { label: 'BOQ & Measurement Book', icon: FileSpreadsheet, path: '/boq-mb' },
-        { label: 'Schedule of Rates', icon: Calculator, path: '/sor' }
+        { label: 'Schedule of Rates', icon: Calculator, path: '/sor' },
+        { label: 'Non-SOR Rate Analysis', icon: Calculator, path: '/non-sor-rate-analysis' }
       ]
     },
     {
@@ -215,6 +218,7 @@ export default function Sidebar() {
         { label: 'Daily Site Progress Log', icon: ClipboardList, path: '/site-logs' },
         { label: 'BOQ & Measurement Book', icon: FileSpreadsheet, path: '/boq-mb' },
         { label: 'Schedule of Rates', icon: Calculator, path: '/sor' },
+        { label: 'Non-SOR Rate Analysis', icon: Calculator, path: '/non-sor-rate-analysis' },
         { label: 'Project Estimation', icon: DollarSign, path: '/estimation' }
       ]
     },
