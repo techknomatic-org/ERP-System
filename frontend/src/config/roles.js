@@ -36,12 +36,12 @@ export const SWITCHER_ROLES = [
 export const ROLE_PERMITTED_ROUTES = {
   admin: ["*"],
   management: ["*"],
-  project_manager: ["/", "/projects", "/wbs", "/site-logs", "/boq-mb", "/approvals", "/vendors", "/procurement", "/inventory", "/properties", "/units", "/customers", "/audit-logs", "/settings", "/ai-analytics", "/tally", "/hse", "/quality", "/facility", "/financial-requests"],
-  site_engineer: ["/", "/projects", "/wbs", "/site-logs", "/boq-mb", "/procurement", "/inventory", "/hse", "/approvals", "/ai-analytics", "/financial-requests"],
-  finance: ["/", "/bookings", "/contractor-billing", "/projects", "/procurement", "/ai-analytics", "/tally", "/approvals", "/inventory", "/customers", "/audit-logs", "/settings", "/financial-requests"],
-  procurement: ["*", "/", "/procurement", "/vendors", "/boq-mb", "/inventory", "/approvals", "/financial-requests"],
+  project_manager: ["/", "/projects", "/wbs", "/work-plan", "/task-assignments", "/project-team", "/site-logs", "/boq-mb", "/sor", "/estimation", "/contractor-awards", "/work-orders", "/approvals", "/vendors", "/procurement", "/inventory", "/properties", "/units", "/customers", "/audit-logs", "/settings", "/ai-analytics", "/tally", "/hse", "/quality", "/facility", "/financial-requests"],
+  site_engineer: ["/", "/projects", "/wbs", "/work-plan", "/task-assignments", "/project-team", "/site-logs", "/boq-mb", "/sor", "/estimation", "/contractor-awards", "/work-orders", "/procurement", "/inventory", "/hse", "/approvals", "/ai-analytics", "/financial-requests"],
+  finance: ["/", "/bookings", "/contractor-billing", "/projects", "/procurement", "/sor", "/estimation", "/contractor-awards", "/work-orders", "/work-plan", "/task-assignments", "/project-team", "/ai-analytics", "/tally", "/approvals", "/inventory", "/customers", "/audit-logs", "/settings", "/financial-requests"],
+  procurement: ["*", "/", "/procurement", "/vendors", "/boq-mb", "/sor", "/estimation", "/contractor-awards", "/work-orders", "/work-plan", "/task-assignments", "/project-team", "/inventory", "/approvals", "/financial-requests"],
   hse: ["/", "/hse", "/quality", "/approvals", "/projects", "/site-logs"],
-  qc: ["/", "/quality", "/hse", "/approvals", "/projects", "/boq-mb"],
+  qc: ["/", "/quality", "/hse", "/approvals", "/projects", "/boq-mb", "/sor", "/estimation"],
   facility_manager: ["/", "/facility", "/inventory", "/approvals", "/properties", "/units"],
   customer: ["/portal"]
 };

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from passlib.context import CryptContext
@@ -11,6 +11,28 @@ from app.api.audit import record_audit_log
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication & RBAC"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def get_current_user(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+) -> User:
+    """Extract current authenticated user from Bearer token or return default admin."""
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split("Bearer ")[1].strip()
+        parts = token.split("-")
+        if len(parts) >= 3 and parts[0] == "demo" and parts[1] == "token":
+            try:
+                user_id = int(parts[2])
+                user = db.query(User).filter(User.id == user_id).first()
+                if user:
+                    return user
+            except Exception:
+                pass
+    admin_user = db.query(User).filter(User.username == "admin").first()
+    if not admin_user:
+        admin_user = db.query(User).first()
+    return admin_user
+
 
 ROLE_DEFAULT_ROUTES = {
     "admin": "/",

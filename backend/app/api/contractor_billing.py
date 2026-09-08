@@ -46,6 +46,24 @@ def submit_contractor_bill(bill_in: ContractorBillCreate, db: Session = Depends(
     status_state = "discrepancy_flagged" if discrepancy else "verified_matched"
     reason_str = " | ".join(reasons) if discrepancy else "3-Way Match Verified (BOQ <= MB <= Bill)"
 
+    # Capture rate snapshot from linked SOR item if available
+    sor_ed_name = None
+    sor_reg_name = None
+    s_code = None
+    b_rate = None
+    c_index = None
+    a_rate = None
+
+    if boq and boq.sor_id:
+        sor_obj = boq.sor
+        if sor_obj:
+            sor_ed_name = sor_obj.sor_edition_name
+            sor_reg_name = sor_obj.sor_region_name
+            s_code = sor_obj.sor_code
+            b_rate = float(sor_obj.base_rate or sor_obj.rate or 0.0)
+            c_index = float(sor_obj.cost_index if sor_obj.cost_index is not None else 1.0)
+            a_rate = round(b_rate * c_index, 2)
+
     bill = ContractorBill(
         bill_number=bill_code,
         project_id=bill_in.project_id,
@@ -58,7 +76,14 @@ def submit_contractor_bill(bill_in: ContractorBillCreate, db: Session = Depends(
         boq_qty=boq_qty,
         discrepancy_flag=discrepancy,
         discrepancy_reason=reason_str,
-        status=status_state
+        status=status_state,
+        sor_edition_name=sor_ed_name,
+        sor_region_name=sor_reg_name,
+        sor_code=s_code,
+        base_rate=b_rate,
+        cost_index=c_index,
+        adjusted_rate=a_rate,
+        snapshot_timestamp=datetime.utcnow()
     )
     db.add(bill)
     db.flush()

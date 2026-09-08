@@ -161,6 +161,57 @@ export default function ProjectDetails() {
       {/* Requirement 6: OVERVIEW TAB */}
       {activeTab === 'overview' && (
         <div>
+          {/* PSC-01 DRAFT Activation Gate Banner */}
+          {(project.status || '').toUpperCase() === 'DRAFT' && (
+            <div style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '8px', padding: '1rem 1.25rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'flex-start', gap: '0.85rem' }}>
+              <AlertTriangle size={22} color="#f59e0b" style={{ marginTop: '0.1rem', flexShrink: 0 }} />
+              <div>
+                <h4 style={{ margin: '0 0 0.25rem 0', color: '#fbbf24', fontSize: '0.95rem' }}>Project Status: DRAFT</h4>
+                <p style={{ margin: 0, fontSize: '0.83rem', color: '#cbd5e1', lineHeight: '1.4' }}>
+                  This project was created in <strong>DRAFT</strong> status. Pursuant to enterprise PSC-01 governance rules, a project cannot transition to <strong>ACTIVE</strong> until ALL three conditions are satisfied:
+                </p>
+                <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.5rem', fontSize: '0.78rem' }}>
+                  <span style={{ color: '#10b981' }}>1. ✅ BOQ Attached</span>
+                  <span style={{ color: '#10b981' }}>2. ✅ Detailed Estimate Attached</span>
+                  <span style={{ color: '#f59e0b' }}>3. ⏳ Approved Technical Sanction (PSC-07)</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* PSC-01 Project Contract Meta Panel */}
+          <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '1.25rem' }}>
+            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <FileText size={18} /> Contract & Organization Parameters (PSC-01)
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', fontSize: '0.85rem' }}>
+              <div>
+                <span style={{ color: '#94a3b8', display: 'block', fontSize: '0.75rem' }}>TENANT</span>
+                <strong style={{ color: '#f8fafc' }}>{project.tenant_name || 'Default Tenant'}</strong>
+              </div>
+              <div>
+                <span style={{ color: '#94a3b8', display: 'block', fontSize: '0.75rem' }}>DIVISION / CIRCLE</span>
+                <strong style={{ color: '#f8fafc' }}>{project.division_name || 'Civil Infrastructure Division'}</strong>
+              </div>
+              <div>
+                <span style={{ color: '#94a3b8', display: 'block', fontSize: '0.75rem' }}>CONTRACT TYPE</span>
+                <strong style={{ color: '#38bdf8' }}>{project.contract_type || 'Item Rate'}</strong>
+              </div>
+              <div>
+                <span style={{ color: '#94a3b8', display: 'block', fontSize: '0.75rem' }}>FUNDING MODE</span>
+                <strong style={{ color: '#f8fafc' }}>{project.funding_mode || 'Budgeted'}</strong>
+              </div>
+              <div>
+                <span style={{ color: '#94a3b8', display: 'block', fontSize: '0.75rem' }}>CONTRACT DURATION</span>
+                <strong style={{ color: '#10b981' }}>{project.contract_duration_days || 0} Days</strong>
+              </div>
+              <div>
+                <span style={{ color: '#94a3b8', display: 'block', fontSize: '0.75rem' }}>ESTIMATED VALUE</span>
+                <strong style={{ color: '#f8fafc' }}>${parseFloat(project.budget || 0).toLocaleString()}</strong>
+              </div>
+            </div>
+          </div>
+
           {/* Top 4 KPI Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
             <div className="glass-card" style={{ padding: '1rem', borderLeft: '4px solid #10b981' }}>

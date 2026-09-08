@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, XCircle, RotateCcw, ShieldCheck, DollarSign, HardHat, ArrowRight, UserCheck, Clock, Check, Plus, FileText } from 'lucide-react';
+import { CheckCircle2, XCircle, RotateCcw, ShieldCheck, DollarSign, HardHat, ArrowRight, UserCheck, Clock, Check, Plus, FileText, Camera, X } from 'lucide-react';
 import { approvalService, projectService, siteLogService, contractorBillingService } from '../services/api';
+
+const getImageUrl = (filePath) => {
+  if (!filePath) return '';
+  if (filePath.startsWith('http://') || filePath.startsWith('https://')) return filePath;
+  const cleanPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+  return `http://localhost:8000/${cleanPath}`;
+};
 
 const FINANCIAL_TYPES = [
   "pr", "purchaserequisition", "po", "purchaseorder", "payment", 
@@ -40,6 +47,7 @@ export default function Approvals() {
   const [actionComments, setActionComments] = useState('');
   const [activeRole, setActiveRole] = useState(localStorage.getItem('erp_role') || 'admin');
   const [statusTab, setStatusTab] = useState('pending');
+  const [previewPhoto, setPreviewPhoto] = useState(null);
 
   // Create New Request Modal state (Requirements 1, 2, 3, 4, 5)
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -487,6 +495,31 @@ export default function Approvals() {
                     <strong>Blockers / Site Issues:</strong> {taskDetails.site_log.issues_identified}
                   </div>
                 )}
+
+                {/* ATTACHED SITE PHOTOS FOR PROJECT MANAGER REVIEW */}
+                {taskDetails.site_log.photos && taskDetails.site_log.photos.length > 0 && (
+                  <div style={{ marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#38bdf8', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <Camera size={15} /> ATTACHED SITE PHOTOS ({taskDetails.site_log.photos.length})
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.6rem' }}>
+                      {taskDetails.site_log.photos.map(p => (
+                        <div
+                          key={p.id}
+                          style={{ borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.12)', background: '#020617', cursor: 'pointer' }}
+                          onClick={() => setPreviewPhoto(p)}
+                        >
+                          <img src={getImageUrl(p.file_path)} alt={p.caption || p.file_name} style={{ width: '100%', height: '80px', objectFit: 'cover' }} />
+                          {p.caption && (
+                            <div style={{ padding: '0.25rem 0.35rem', fontSize: '0.7rem', color: '#cbd5e1', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {p.caption}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -763,6 +796,41 @@ export default function Approvals() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* LIGHTBOX PREVIEW MODAL */}
+      {previewPhoto && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '1.5rem' }}>
+          <div className="glass-card" style={{ maxWidth: '800px', width: '100%', background: '#0f172a', padding: '1.25rem', borderRadius: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <div style={{ fontSize: '0.9rem', color: '#38bdf8', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Camera size={18} /> {previewPhoto.file_name}
+              </div>
+              <button className="btn btn-secondary" style={{ padding: '0.25rem' }} onClick={() => setPreviewPhoto(null)}><X size={18} /></button>
+            </div>
+
+            <div style={{ background: '#020617', borderRadius: '8px', overflow: 'hidden', textAlign: 'center', marginBottom: '0.75rem', maxHeight: '65vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <img
+                src={getImageUrl(previewPhoto.file_path)}
+                alt={previewPhoto.caption || previewPhoto.file_name}
+                style={{ maxWidth: '100%', maxHeight: '65vh', objectFit: 'contain' }}
+              />
+            </div>
+
+            {previewPhoto.caption && (
+              <div style={{ padding: '0.65rem 0.85rem', background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: '6px', color: '#f8fafc', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
+                <strong>Caption:</strong> {previewPhoto.caption}
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.5rem', fontSize: '0.78rem', color: '#94a3b8' }}>
+              <div>Log Reference: <strong style={{ color: '#38bdf8' }}>Log #DSL-{previewPhoto.site_log_id}</strong></div>
+              <div>Project: <strong style={{ color: '#f8fafc' }}>{previewPhoto.project_name || previewPhoto.project_id}</strong></div>
+              <div>Uploaded By: <strong style={{ color: '#f8fafc' }}>{previewPhoto.uploader_name || 'Site Engineer'}</strong></div>
+              <div>Date: <strong style={{ color: '#f8fafc' }}>{new Date(previewPhoto.created_at).toLocaleString()}</strong></div>
+            </div>
           </div>
         </div>
       )}

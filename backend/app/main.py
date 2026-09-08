@@ -1,20 +1,31 @@
+import os
+from fastapi.staticfiles import StaticFiles
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.api import (
-    dashboard, inventory, sales, customers, system, auth, 
-    notifications, approvals, audit, documents,
-    properties, buildings, units, crm_leads, bookings, payments, portal,
-    projects, wbs, site_logs,
-    vendors, boq_mb, contractor_billing,
-    hse, quality, facility, tally, ai_analytics
-)
+
+os.makedirs("uploads", exist_ok=True)
+os.makedirs("uploads/site_photos", exist_ok=True)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description="FastAPI Backend for Enterprise Real Estate & Construction ERP System"
 )
+
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+from app.api import (
+    dashboard, inventory, sales, customers, system, auth, 
+    notifications, approvals, audit, documents,
+    properties, buildings, units, crm_leads, bookings, payments, portal,
+    projects, wbs, site_logs,
+    vendors, boq_mb, contractor_billing,
+    hse, quality, facility, tally, ai_analytics,
+    schedule_of_rates, estimation, contractor_awards, work_orders, work_plans, task_assignments, project_teams
+)
+
+
+
 
 # Enable CORS for React Frontend on Localhost
 app.add_middleware(
@@ -68,6 +79,28 @@ app.include_router(tally.router)
 
 # Phase 8 Router
 app.include_router(ai_analytics.router)
+
+# SOR Router
+app.include_router(schedule_of_rates.router)
+
+# Estimation Router
+app.include_router(estimation.router)
+
+# Contractor Award Router
+app.include_router(contractor_awards.router)
+
+# Work Order Router
+app.include_router(work_orders.router)
+
+# Work Plan Router
+app.include_router(work_plans.router)
+
+# Task Assignments Router
+app.include_router(task_assignments.router)
+
+# Project Teams Router
+app.include_router(project_teams.router)
+
 
 @app.get("/")
 def root():

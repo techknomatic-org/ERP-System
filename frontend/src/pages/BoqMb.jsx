@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
   Layers, Plus, ClipboardList, CheckCircle2, ArrowLeft, Package, DollarSign, 
-  Eye, FileText, AlertCircle, RefreshCw, X, CheckSquare, Truck
+  Eye, FileText, AlertCircle, RefreshCw, X, CheckSquare, Truck, Edit
 } from 'lucide-react';
 import { boqMbService, projectService, vendorService } from '../services/api';
 
@@ -18,7 +18,8 @@ export default function BoqMb() {
   const [wbsData, setWbsData] = useState({ phases: [], tasks: [], subtasks: [] });
   const [loading, setLoading] = useState(false);
 
-  // Modals visibility
+  // Modals visibility & editing state
+  const [editingBoqId, setEditingBoqId] = useState(null);
   const [showBoqModal, setShowBoqModal] = useState(false);
   const [showMbModal, setShowMbModal] = useState(false);
   const [showMbLogModal, setShowMbLogModal] = useState(false);
@@ -27,6 +28,12 @@ export default function BoqMb() {
 
   const [targetBoqItem, setTargetBoqItem] = useState(null);
   const [mbLogs, setMbLogs] = useState([]);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   // Forms state
   const [boqForm, setBoqForm] = useState({
@@ -87,34 +94,104 @@ export default function BoqMb() {
     }
   }, [selectedProjectId]);
 
-  // Calculate BOQ Total Amount
-  const calculatedTotal = (parseFloat(boqForm.approved_qty) || 0) * (parseFloat(boqForm.rate) || 0);
+  const formatCurrency = (val) => {
+    const num = parseFloat(val || 0);
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(num);
+  };
 
-  // Handle Create BOQ Item
-  const handleCreateBoq = (e) => {
+  // Calculate BOQ Total Amount
+  const qtyNum = parseFloat(boqForm.approved_qty);
+  const rateNum = parseFloat(boqForm.rate);
+  const calculatedTotal = (!isNaN(qtyNum) && !isNaN(rateNum) && qtyNum > 0 && rateNum >= 0) ? (qtyNum * rateNum) : 0;
+
+  // Handle Open Edit BOQ Item Modal
+  const handleOpenEditBoq = (item) => {
+    setEditingBoqId(item.id);
+    setTargetBoqItem(item);
+    setBoqForm({
+      phase_id: item.phase_id ? String(item.phase_id) : '',
+      task_id: item.task_id ? String(item.task_id) : '',
+      subtask_id: item.subtask_id ? String(item.subtask_id) : '',
+      item_name: item.item_name || '',
+      unit: item.unit || 'm³',
+      approved_qty: item.approved_qty ? String(item.approved_qty) : '',
+      rate: item.rate ? String(item.rate) : '',
+      vendor_id: item.vendor_id ? String(item.vendor_id) : ''
+    });
+    setShowBoqModal(true);
+  };
+
+  // Handle Save (Create or Update) BOQ Item
+  const handleSaveBoq = (e) => {
     e.preventDefault();
     if (!selectedProjectId) {
-      alert("Please select a project first.");
+      showToast("Please select a project first.", "error");
       return;
     }
 
-    boqMbService.createBoqItem({
-      project_id: parseInt(selectedProjectId),
-      phase_id: boqForm.phase_id ? parseInt(boqForm.phase_id) : null,
-      task_id: boqForm.task_id ? parseInt(boqForm.task_id) : null,
-      subtask_id: boqForm.subtask_id ? parseInt(boqForm.subtask_id) : null,
-      item_name: boqForm.item_name,
+    const qty = parseFloat(boqForm.approved_qty);
+    const rate = parseFloat(boqForm.rate);
+
+    if (!boqForm.item_name || !boqForm.item_name.trim()) {
+      showToast("Item Description is required.", "error");
+      return;
+    }
+
+    if (isNaN(qty) || qty <= 0) {
+      showToast("Approved Quantity must be greater than 0.", "error");
+      return;
+    }
+
+    if (isNaN(rate) || rate < 0) {
+      showToast("Unit Rate must be greater than or equal to 0.", "error");
+      return;
+    }
+
+    const payload = {
+      project_id: parseInt(selectedProjectId, 10),
+      phase_id: boqForm.phase_id ? parseInt(boqForm.phase_id, 10) : null,
+      task_id: boqForm.task_id ? parseInt(boqForm.task_id, 10) : null,
+      subtask_id: boqForm.subtask_id ? parseInt(boqForm.subtask_id, 10) : null,
+      item_name: boqForm.item_name.trim(),
       unit: boqForm.unit,
-      approved_qty: parseFloat(boqForm.approved_qty),
-      rate: parseFloat(boqForm.rate),
-      vendor_id: boqForm.vendor_id ? parseInt(boqForm.vendor_id) : null
-    })
-      .then(() => {
-        setShowBoqModal(false);
-        setBoqForm({ phase_id: '', task_id: '', subtask_id: '', item_name: '', unit: 'cu.m', approved_qty: '', rate: '', vendor_id: '' });
-        loadProjectData(selectedProjectId);
-      })
-      .catch((err) => alert(err.response?.data?.detail || "Failed to add BOQ item"));
+      approved_qty: qty,
+      rate: rate,
+      vendor_id: boqForm.vendor_id ? parseInt(boqForm.vendor_id, 10) : null
+    };
+
+    if (editingBoqId) {
+      boqMbService.updateBoqItem(editingBoqId, payload)
+        .then(() => {
+          setShowBoqModal(false);
+          setEditingBoqId(null);
+          setBoqForm({ phase_id: '', task_id: '', subtask_id: '', item_name: '', unit: 'm³', approved_qty: '', rate: '', vendor_id: '' });
+          loadProjectData(selectedProjectId);
+          showToast("BOQ Line Item updated successfully!", "success");
+        })
+        .catch((err) => {
+          const detail = err.response?.data?.detail;
+          const msg = detail || (typeof err.response?.data === 'string' ? err.response.data : "Failed to update BOQ item");
+          showToast(msg, "error");
+        });
+    } else {
+      boqMbService.createBoqItem(payload)
+        .then(() => {
+          setShowBoqModal(false);
+          setBoqForm({ phase_id: '', task_id: '', subtask_id: '', item_name: '', unit: 'm³', approved_qty: '', rate: '', vendor_id: '' });
+          loadProjectData(selectedProjectId);
+          showToast("BOQ Line Item created successfully!", "success");
+        })
+        .catch((err) => {
+          const detail = err.response?.data?.detail;
+          const msg = detail || "Failed to add BOQ item";
+          showToast(msg, "error");
+        });
+    }
   };
 
   // Handle Record MB Measurement
@@ -259,7 +336,7 @@ export default function BoqMb() {
               <option key={p.id} value={p.id}>{p.code}: {p.name}</option>
             ))}
           </select>
-          <button className="btn btn-primary" onClick={() => setShowBoqModal(true)}>
+          <button className="btn btn-primary" onClick={() => { setEditingBoqId(null); setBoqForm({ phase_id: '', task_id: '', subtask_id: '', item_name: '', unit: 'm³', approved_qty: '', rate: '', vendor_id: '' }); setShowBoqModal(true); }}>
             <Plus size={18} /> Add BOQ Item
           </button>
         </div>
@@ -336,6 +413,15 @@ export default function BoqMb() {
                         <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
                           <button 
                             className="btn btn-secondary" 
+                            style={{ padding: '0.2rem 0.45rem', fontSize: '0.72rem', color: '#38bdf8', borderColor: 'rgba(56,189,248,0.3)' }} 
+                            onClick={() => handleOpenEditBoq(b)}
+                            title="Edit BOQ line item"
+                          >
+                            <Edit size={12} /> Edit
+                          </button>
+
+                          <button 
+                            className="btn btn-secondary" 
                             style={{ padding: '0.2rem 0.45rem', fontSize: '0.72rem' }} 
                             onClick={() => { setTargetBoqItem(b); setShowMbModal(true); }}
                             title="Record actual site measurement"
@@ -380,16 +466,25 @@ export default function BoqMb() {
         </div>
       </div>
 
-      {/* CREATE BOQ ITEM MODAL */}
+      {/* CREATE / EDIT BOQ ITEM MODAL */}
       {showBoqModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div className="glass-card" style={{ width: '560px', background: '#1e293b', padding: '1.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <h3 style={{ margin: 0 }}>Add BOQ Line Item</h3>
+              <h3 style={{ margin: 0 }}>{editingBoqId ? "Edit BOQ Line Item" : "Add BOQ Line Item"}</h3>
               <button className="btn btn-secondary" style={{ padding: '0.25rem' }} onClick={() => setShowBoqModal(false)}><X size={16} /></button>
             </div>
 
-            <form onSubmit={handleCreateBoq}>
+            {editingBoqId && targetBoqItem && targetBoqItem.executed_qty > 0 && (
+              <div style={{ padding: '0.65rem 0.85rem', background: 'rgba(245,158,11,0.1)', borderRadius: '8px', border: '1px solid rgba(245,158,11,0.3)', marginBottom: '1rem', color: '#f59e0b', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <AlertCircle size={16} />
+                <span>
+                  <strong>Execution Warning:</strong> This item has {targetBoqItem.executed_qty} {targetBoqItem.unit} recorded site execution. Approved quantity cannot be set lower than executed amount.
+                </span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveBoq}>
               <div className="form-group">
                 <label>Item Name / Description *</label>
                 <input required type="text" className="form-control" placeholder="Foundation Concrete Slab Pour (M30)" value={boqForm.item_name} onChange={e => setBoqForm({ ...boqForm, item_name: e.target.value })} />
@@ -435,6 +530,7 @@ export default function BoqMb() {
                 <div className="form-group">
                   <label>Unit *</label>
                   <select className="form-control" value={boqForm.unit} onChange={e => setBoqForm({ ...boqForm, unit: e.target.value })}>
+                    <option value="m³">m³ (Cubic Meters)</option>
                     <option value="cu.m">cu.m (Cubic Meters)</option>
                     <option value="sq.ft">sq.ft (Square Feet)</option>
                     <option value="sq.m">sq.m (Square Meters)</option>
@@ -456,8 +552,8 @@ export default function BoqMb() {
               {/* Auto Calculated Total & Budget Preview */}
               <div style={{ padding: '0.75rem', background: 'rgba(16,185,129,0.1)', borderRadius: '8px', border: '1px solid rgba(16,185,129,0.2)', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Auto-Calculated Total Amount:</span>
-                <strong style={{ fontSize: '1.1rem', color: '#10b981' }}>
-                  {isNaN(calculatedTotal) || calculatedTotal <= 0 ? "₹0" : `₹${calculatedTotal.toLocaleString()}`}
+                <strong style={{ fontSize: '1.1rem', color: '#10b981', fontFamily: 'monospace' }}>
+                  {formatCurrency(calculatedTotal)}
                 </strong>
               </div>
 
@@ -471,7 +567,7 @@ export default function BoqMb() {
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowBoqModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Save BOQ Line Item</button>
+                <button type="submit" className="btn btn-primary">{editingBoqId ? "Save Changes" : "Save BOQ Line Item"}</button>
               </div>
             </form>
           </div>
@@ -672,6 +768,21 @@ export default function BoqMb() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 9999,
+          display: 'flex', alignItems: 'center', gap: '0.75rem',
+          padding: '0.85rem 1.25rem', borderRadius: '8px',
+          background: toast.type === 'error' ? 'rgba(239, 68, 68, 0.95)' : 'rgba(16, 185, 129, 0.95)',
+          color: '#ffffff', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4)',
+          backdropFilter: 'blur(8px)', fontWeight: 600, fontSize: '0.88rem'
+        }}>
+          {toast.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
+          <span>{toast.message}</span>
         </div>
       )}
     </div>

@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Package, ShoppingCart, Users, Settings, 
   CheckSquare, ShieldAlert, Building2, HardHat, FileText, UserCheck, Key, Layers, ClipboardList,
   Calculator, Truck, FileSpreadsheet, ShieldCheck, AlertOctagon, Sparkles, Wrench,
-  ChevronDown, ChevronRight, ChevronLeft, UserCog, Sliders, Activity, FileBarChart, DollarSign, TrendingUp, Briefcase
+  ChevronDown, ChevronRight, ChevronLeft, UserCog, Sliders, Activity, FileBarChart, DollarSign, TrendingUp, Briefcase, Award, FileCheck, Calendar
 } from 'lucide-react';
 import { approvalService } from '../services/api';
 
@@ -79,8 +79,15 @@ export default function Sidebar() {
       title: 'CONSTRUCTION OPERATIONS',
       items: [
         { label: 'WBS & Task Tree', icon: Layers, path: '/wbs' },
+        { label: 'Work Plan', icon: Calendar, path: '/work-plan' },
+        { label: 'Task Assignments', icon: UserCheck, path: '/task-assignments' },
+        { label: 'Project Team', icon: Users, path: '/project-team' },
         { label: 'Daily Site Logs', icon: ClipboardList, path: '/site-logs' },
         { label: 'BOQ & Measurement Book', icon: FileSpreadsheet, path: '/boq-mb' },
+        { label: 'Schedule of Rates', icon: Calculator, path: '/sor' },
+        { label: 'Project Estimation', icon: DollarSign, path: '/estimation' },
+        { label: 'Contractor Awards', icon: Award, path: '/contractor-awards' },
+        { label: 'Work Orders', icon: FileCheck, path: '/work-orders' },
         { label: 'CRM Leads', icon: UserCheck, path: '/crm-leads' },
         { label: 'Unit Bookings', icon: Key, path: '/bookings' },
       ]
@@ -151,7 +158,10 @@ export default function Sidebar() {
       title: 'PROJECT MANAGEMENT',
       items: [
         { label: 'PM Dashboard', icon: LayoutDashboard, path: '/' },
-        { label: 'Construction Projects', icon: HardHat, path: '/projects' }
+        { label: 'Construction Projects', icon: HardHat, path: '/projects' },
+        { label: 'Project Estimation', icon: DollarSign, path: '/estimation' },
+        { label: 'Contractor Awards', icon: Award, path: '/contractor-awards' },
+        { label: 'Work Orders', icon: FileCheck, path: '/work-orders' }
       ]
     },
     {
@@ -159,8 +169,12 @@ export default function Sidebar() {
       title: 'PLANNING & EXECUTION',
       items: [
         { label: 'WBS & Task Tree', icon: Layers, path: '/wbs' },
+        { label: 'Work Plan', icon: Calendar, path: '/work-plan' },
+        { label: 'Task Assignments', icon: UserCheck, path: '/task-assignments' },
+        { label: 'Project Team', icon: Users, path: '/project-team' },
         { label: 'Daily Site Logs', icon: ClipboardList, path: '/site-logs' },
-        { label: 'BOQ & Measurement Book', icon: FileSpreadsheet, path: '/boq-mb' }
+        { label: 'BOQ & Measurement Book', icon: FileSpreadsheet, path: '/boq-mb' },
+        { label: 'Schedule of Rates', icon: Calculator, path: '/sor' }
       ]
     },
     {
@@ -199,7 +213,9 @@ export default function Sidebar() {
       items: [
         { label: 'WBS & Task Hierarchy', icon: Layers, path: '/wbs' },
         { label: 'Daily Site Progress Log', icon: ClipboardList, path: '/site-logs' },
-        { label: 'BOQ & Measurement Book', icon: FileSpreadsheet, path: '/boq-mb' }
+        { label: 'BOQ & Measurement Book', icon: FileSpreadsheet, path: '/boq-mb' },
+        { label: 'Schedule of Rates', icon: Calculator, path: '/sor' },
+        { label: 'Project Estimation', icon: DollarSign, path: '/estimation' }
       ]
     },
     {

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
-from app.models import ApprovalTask, ApprovalLog, AuditLog, Notification, SiteDailyLog, ContractorBill, PurchaseRequisition, User, Project
+from app.models import ApprovalTask, ApprovalLog, AuditLog, Notification, SiteDailyLog, SiteLogPhoto, WbsTask, ContractorBill, PurchaseRequisition, User, Project
 from app.schemas import ApprovalTaskCreate, ApprovalAction, ApprovalTaskResponse
 from app.api.audit import record_audit_log
 
@@ -89,6 +89,16 @@ REQUEST_TYPES_REGISTRY = {
         "display_sublabel": "(Other Financial Request)",
         "financial_requirement": True,
         "workflow": ["Site Engineer", "Project Manager", "Finance", "Management"]
+    },
+    "CONTRACTOR_AWARD": {
+        "request_type": "Contractor Award Approval",
+        "request_code": "CONTRACTOR_AWARD",
+        "category": "FINANCIAL",
+        "source_module": "CONTRACTOR_AWARDS",
+        "source_module_label": "Contractor Awards",
+        "display_sublabel": "(Contractor Award)",
+        "financial_requirement": True,
+        "workflow": ["Project Manager", "Finance", "Management"]
     }
 }
 
@@ -130,7 +140,11 @@ ENTITY_TO_TYPE_MAP = {
     "purchasepayment": "PURCHASE_PAYMENT",
     
     "other_financial_request": "OTHER_FINANCIAL_REQUEST",
-    "otherfinancialrequest": "OTHER_FINANCIAL_REQUEST"
+    "otherfinancialrequest": "OTHER_FINANCIAL_REQUEST",
+
+    "contractor_award": "CONTRACTOR_AWARD",
+    "contractoraward": "CONTRACTOR_AWARD",
+    "award": "CONTRACTOR_AWARD"
 }
 
 def get_request_type_config(entity_type: str) -> dict:
@@ -190,12 +204,15 @@ def build_task_dict(task: ApprovalTask, db: Session) -> dict:
     # Extract project_id and project_name if available
     project_id = None
     project_name = None
+    site_log_details = None
     if task.entity_type in ["SiteLog", "SiteDailyLog", "SITE_LOG", "SITE_DAILY_LOG"]:
         log_rec = db.query(SiteDailyLog).filter(SiteDailyLog.id == task.entity_id).first()
         if log_rec:
             project_id = log_rec.project_id
             prj = db.query(Project).filter(Project.id == log_rec.project_id).first()
             if prj: project_name = prj.name
+            from app.api.site_logs import build_site_log_response
+            site_log_details = build_site_log_response(log_rec, db)
     elif task.entity_type in ["ContractorBill", "CONTRACTOR_BILL", "CONTRACTOR_BILL_PAYMENT"]:
         bill_rec = db.query(ContractorBill).filter(ContractorBill.id == task.entity_id).first()
         if bill_rec:
@@ -326,7 +343,8 @@ def build_task_dict(task: ApprovalTask, db: Session) -> dict:
         # Legacy backward-compatibility aliases
         "sourceType": task.entity_type,
         "sourceId": task.entity_id,
-        "createdDate": task.created_at.isoformat() if task.created_at else None
+        "createdDate": task.created_at.isoformat() if task.created_at else None,
+        "site_log_details": site_log_details
     }
 
 @router.get("/tasks")
@@ -378,6 +396,33 @@ def get_approval_task_details(task_id: int, db: Session = Depends(get_db)):
         log = db.query(SiteDailyLog).filter(SiteDailyLog.id == task.entity_id).first()
         if log:
             project = db.query(Project).filter(Project.id == log.project_id).first()
+            db_photos = db.query(SiteLogPhoto).filter(SiteLogPhoto.site_log_id == log.id).all()
+            photos_list = []
+            for p in db_photos:
+                uploader = db.query(User).filter(User.id == p.uploaded_by_id).first()
+                prj = db.query(Project).filter(Project.id == p.project_id).first()
+                phase_task = db.query(WbsTask).filter(WbsTask.id == p.phase_id).first() if p.phase_id else None
+                t_task = db.query(WbsTask).filter(WbsTask.id == p.task_id).first() if p.task_id else None
+                photos_list.append({
+                    "id": p.id,
+                    "site_log_id": p.site_log_id,
+                    "project_id": p.project_id,
+                    "phase_id": p.phase_id,
+                    "task_id": p.task_id,
+                    "subtask_id": p.subtask_id,
+                    "boq_item_id": p.boq_item_id,
+                    "file_name": p.file_name,
+                    "file_path": p.file_path,
+                    "file_size": p.file_size or 0,
+                    "file_type": p.file_type,
+                    "caption": p.caption,
+                    "uploaded_by_id": p.uploaded_by_id,
+                    "created_at": p.created_at,
+                    "uploader_name": uploader.full_name if uploader else "Site Engineer",
+                    "project_name": prj.name if prj else None,
+                    "phase_name": phase_task.title if phase_task else None,
+                    "task_name": t_task.title if t_task else None
+                })
             details["site_log"] = {
                 "id": log.id,
                 "project_id": log.project_id,
@@ -389,7 +434,8 @@ def get_approval_task_details(task_id: int, db: Session = Depends(get_db)):
                 "equipment_used": log.equipment_used,
                 "issues_identified": log.issues_identified,
                 "remarks": log.remarks,
-                "approval_status": log.approval_status
+                "approval_status": log.approval_status,
+                "photos": photos_list
             }
             if project:
                 details["project"] = {"id": project.id, "name": project.name, "code": project.code}
@@ -522,10 +568,17 @@ def process_approval_action(
             # Final stage approved
             task.status = "approved"
 
-            if task.entity_type in ["SiteLog", "SiteDailyLog"]:
+            if task.entity_type in ["SiteLog", "SiteDailyLog", "SITE_DAILY_LOG"]:
                 site_log = db.query(SiteDailyLog).filter(SiteDailyLog.id == task.entity_id).first()
                 if site_log:
                     site_log.approval_status = "approved"
+                    mb = db.query(MeasurementBook).filter(
+                        (MeasurementBook.site_log_id == site_log.id) | (MeasurementBook.location_zone == f"Site Daily Log #{site_log.id}")
+                    ).first()
+                    if mb:
+                        mb.status = "APPROVED"
+                    from app.api.wbs import recalculate_project_wbs
+                    recalculate_project_wbs(db, site_log.project_id)
             elif task.entity_type == "ContractorBill":
                 bill = db.query(ContractorBill).filter(ContractorBill.id == task.entity_id).first()
                 if bill:
@@ -538,6 +591,11 @@ def process_approval_action(
                 if mpr:
                     mpr.status = "APPROVED_BY_PM"
                     mpr.current_approval_stage = "PROCUREMENT"
+            elif task.entity_type in ["ContractorAward", "contractor_award", "CONTRACTOR_AWARD"]:
+                from app.models import ContractorAward
+                award = db.query(ContractorAward).filter(ContractorAward.id == task.entity_id).first()
+                if award:
+                    award.status = "APPROVED"
 
     elif action_in.action == "reject":
         # Stop approval chain on rejection (Requirement 13)
@@ -546,6 +604,13 @@ def process_approval_action(
             site_log = db.query(SiteDailyLog).filter(SiteDailyLog.id == task.entity_id).first()
             if site_log:
                 site_log.approval_status = "rejected"
+                mb = db.query(MeasurementBook).filter(
+                    (MeasurementBook.site_log_id == site_log.id) | (MeasurementBook.location_zone == f"Site Daily Log #{site_log.id}")
+                ).first()
+                if mb:
+                    mb.status = "REJECTED"
+                from app.api.wbs import recalculate_project_wbs
+                recalculate_project_wbs(db, site_log.project_id)
         elif task.entity_type in ["ContractorBill", "CONTRACTOR_BILL", "CONTRACTOR_BILL_PAYMENT"]:
             bill = db.query(ContractorBill).filter(ContractorBill.id == task.entity_id).first()
             if bill:
@@ -554,6 +619,11 @@ def process_approval_action(
             pr = db.query(PurchaseRequisition).filter(PurchaseRequisition.id == task.entity_id).first()
             if pr:
                 pr.status = "rejected"
+        elif task.entity_type in ["ContractorAward", "contractor_award", "CONTRACTOR_AWARD"]:
+            from app.models import ContractorAward
+            award = db.query(ContractorAward).filter(ContractorAward.id == task.entity_id).first()
+            if award:
+                award.status = "REJECTED"
             mpr = db.query(MaterialPurchaseRequest).filter(MaterialPurchaseRequest.id == task.entity_id).first()
             if mpr:
                 mpr.status = "REJECTED"

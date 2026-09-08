@@ -12,11 +12,18 @@ import HseIncidents from './pages/HseIncidents';
 import QualityControl from './pages/QualityControl';
 import ContractorBilling from './pages/ContractorBilling';
 import BoqMb from './pages/BoqMb';
+import ScheduleOfRates from './pages/ScheduleOfRates';
+import ProjectEstimation from './pages/ProjectEstimation';
+import ContractorAwards from './pages/ContractorAwards';
+import WorkOrders from './pages/WorkOrders';
 import Vendors from './pages/Vendors';
 import Procurement from './pages/Procurement';
 import Projects from './pages/Projects';
 import ProjectDetails from './pages/ProjectDetails';
 import WbsGantt from './pages/WbsGantt';
+import WorkPlan from './pages/WorkPlan';
+import TaskAssignments from './pages/TaskAssignments';
+import ProjectTeam from './pages/ProjectTeam';
 import SiteLogs from './pages/SiteLogs';
 import Properties from './pages/Properties';
 import PropertyDetails from './pages/PropertyDetails';
@@ -104,12 +111,19 @@ export default function App() {
           <Route path="/quality" element={<RoleProtectedRouteGuard path="/quality"><QualityControl /></RoleProtectedRouteGuard>} />
           <Route path="/contractor-billing" element={<RoleProtectedRouteGuard path="/contractor-billing"><ContractorBilling /></RoleProtectedRouteGuard>} />
           <Route path="/boq-mb" element={<RoleProtectedRouteGuard path="/boq-mb"><BoqMb /></RoleProtectedRouteGuard>} />
+          <Route path="/sor" element={<RoleProtectedRouteGuard path="/sor"><ScheduleOfRates /></RoleProtectedRouteGuard>} />
+          <Route path="/estimation" element={<RoleProtectedRouteGuard path="/estimation"><ProjectEstimation /></RoleProtectedRouteGuard>} />
+          <Route path="/contractor-awards" element={<RoleProtectedRouteGuard path="/contractor-awards"><ContractorAwards /></RoleProtectedRouteGuard>} />
+          <Route path="/work-orders" element={<RoleProtectedRouteGuard path="/work-orders"><WorkOrders /></RoleProtectedRouteGuard>} />
           <Route path="/vendors" element={<RoleProtectedRouteGuard path="/vendors"><Vendors /></RoleProtectedRouteGuard>} />
           <Route path="/procurement" element={<RoleProtectedRouteGuard path="/procurement"><Procurement /></RoleProtectedRouteGuard>} />
           <Route path="/procurement/*" element={<RoleProtectedRouteGuard path="/procurement"><Procurement /></RoleProtectedRouteGuard>} />
           <Route path="/projects" element={<RoleProtectedRouteGuard path="/projects"><Projects /></RoleProtectedRouteGuard>} />
           <Route path="/projects/:id" element={<RoleProtectedRouteGuard path="/projects"><ProjectDetails /></RoleProtectedRouteGuard>} />
           <Route path="/wbs" element={<RoleProtectedRouteGuard path="/wbs"><WbsGantt /></RoleProtectedRouteGuard>} />
+          <Route path="/work-plan" element={<RoleProtectedRouteGuard path="/work-plan"><WorkPlan /></RoleProtectedRouteGuard>} />
+          <Route path="/task-assignments" element={<RoleProtectedRouteGuard path="/task-assignments"><TaskAssignments /></RoleProtectedRouteGuard>} />
+          <Route path="/project-team" element={<RoleProtectedRouteGuard path="/project-team"><ProjectTeam /></RoleProtectedRouteGuard>} />
           <Route path="/site-logs" element={<RoleProtectedRouteGuard path="/site-logs"><SiteLogs /></RoleProtectedRouteGuard>} />
           <Route path="/properties" element={<RoleProtectedRouteGuard path="/properties"><Properties /></RoleProtectedRouteGuard>} />
           <Route path="/properties/:id" element={<RoleProtectedRouteGuard path="/properties"><PropertyDetails /></RoleProtectedRouteGuard>} />

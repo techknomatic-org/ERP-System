@@ -674,3 +674,80 @@ CREATE TABLE IF NOT EXISTS order_items (
     FOREIGN KEY (order_id) REFERENCES sales_orders(id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS site_log_photos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    site_log_id INT NOT NULL,
+    project_id INT NOT NULL,
+    phase_id INT,
+    task_id INT,
+    subtask_id INT,
+    boq_item_id INT,
+    file_name VARCHAR(255) NOT NULL,
+    file_path VARCHAR(500) NOT NULL,
+    file_size INT DEFAULT 0,
+    file_type VARCHAR(50),
+    caption TEXT,
+    uploaded_by_id INT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (site_log_id) REFERENCES site_daily_logs(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (phase_id) REFERENCES wbs_tasks(id) ON DELETE SET NULL,
+    FOREIGN KEY (task_id) REFERENCES wbs_tasks(id) ON DELETE SET NULL,
+    FOREIGN KEY (subtask_id) REFERENCES wbs_tasks(id) ON DELETE SET NULL,
+    FOREIGN KEY (boq_item_id) REFERENCES boq_items(id) ON DELETE SET NULL,
+    FOREIGN KEY (uploaded_by_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- 33. Contractor Awards Table
+CREATE TABLE IF NOT EXISTS contractor_awards (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    award_reference VARCHAR(50) NOT NULL UNIQUE,
+    project_id INT NOT NULL,
+    estimate_id INT NOT NULL,
+    contractor_id INT NOT NULL,
+    estimated_amount DECIMAL(14, 2) NOT NULL,
+    award_amount DECIMAL(14, 2) NOT NULL,
+    variance_amount DECIMAL(14, 2) NOT NULL,
+    variance_percentage DECIMAL(8, 2) NOT NULL,
+    award_date DATETIME NOT NULL,
+    start_date DATETIME NOT NULL,
+    completion_date DATETIME NOT NULL,
+    status VARCHAR(30) DEFAULT 'DRAFT' NOT NULL,
+    remarks TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (estimate_id) REFERENCES project_estimates(id) ON DELETE CASCADE,
+    FOREIGN KEY (contractor_id) REFERENCES vendors(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 34. Work Orders Table
+CREATE TABLE IF NOT EXISTS work_orders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    work_order_number VARCHAR(50) NOT NULL UNIQUE,
+    award_id INT NOT NULL,
+    project_id INT NOT NULL,
+    contractor_id INT NOT NULL,
+    issue_date DATETIME NOT NULL,
+    scope_of_work VARCHAR(255) NOT NULL,
+    description TEXT,
+    work_order_value DECIMAL(14, 2) NOT NULL,
+    start_date DATETIME NOT NULL,
+    completion_date DATETIME NOT NULL,
+    payment_terms TEXT,
+    terms_conditions TEXT,
+    remarks TEXT,
+    cancellation_reason TEXT,
+    included_packages TEXT,
+    status VARCHAR(30) DEFAULT 'DRAFT' NOT NULL,
+    created_by_id INT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (award_id) REFERENCES contractor_awards(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (contractor_id) REFERENCES vendors(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+

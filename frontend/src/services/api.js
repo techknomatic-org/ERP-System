@@ -153,6 +153,11 @@ export const projectService = {
   getProjectById: (id) => api.get(`/projects/${id}`),
   createProject: (data) => api.post('/projects/', data),
   updateProject: (id, data) => api.put(`/projects/${id}`, data),
+  getDivisions: (activeOnly = true) => api.get('/projects/divisions', { params: { active_only: activeOnly } }),
+  createDivision: (data) => api.post('/projects/divisions', data),
+  toggleDivisionActive: (id, isActive = null) => api.put(`/projects/divisions/${id}/deactivate`, null, { params: { is_active: isActive } }),
+  getTenantSettings: () => api.get('/projects/tenant-settings'),
+  updateTenantSettings: (data) => api.put('/projects/tenant-settings', data),
 };
 
 export const wbsService = {
@@ -166,7 +171,15 @@ export const wbsService = {
 
 export const siteLogService = {
   getProjectLogs: (projectId) => api.get(`/site-logs/project/${projectId}`),
+  getLogById: (logId) => api.get(`/site-logs/${logId}`),
   createLog: (data) => api.post('/site-logs/', data),
+  updateLog: (logId, data) => api.put(`/site-logs/${logId}`, data),
+  getWorkPlanContext: (wpId) => api.get(`/site-logs/work-plan-context/${wpId}`),
+  uploadPhotos: (siteLogId, formData) => api.post(`/site-logs/${siteLogId}/photos`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  getPhotoGallery: (params = {}) => api.get('/site-logs/photos/gallery', { params }),
+  deletePhoto: (photoId) => api.delete(`/site-logs/photos/${photoId}`),
 };
 
 // PHASE 4 SERVICES
@@ -198,6 +211,7 @@ export const boqMbService = {
   getBoqItems: (projectId) => api.get(`/boq-mb/boq/project/${projectId}`),
   getWbsHierarchy: (projectId) => api.get(`/boq-mb/wbs-hierarchy/${projectId}`),
   createBoqItem: (data) => api.post('/boq-mb/boq', data),
+  updateBoqItem: (boqId, data) => api.put(`/boq-mb/boq/${boqId}`, data),
   getMbRecords: (boqItemId) => api.get(`/boq-mb/mb/boq/${boqItemId}`),
   recordMb: (data) => api.post('/boq-mb/mb', data),
   createMaterialRequest: (data) => api.post('/boq-mb/material-request', data),
@@ -267,6 +281,88 @@ export const aiService = {
     const headers = role ? { 'X-User-Role': role } : {};
     return api.post('/ai/chat', { message: prompt }, { headers, timeout: 10000 });
   },
+};
+
+export const sorService = {
+  getSorItems: (params = {}) => api.get('/schedule-of-rates/', { params }),
+  getSorById: (id) => api.get(`/schedule-of-rates/${id}`),
+  createSorItem: (data) => api.post('/schedule-of-rates/', data),
+  updateSorItem: (id, data) => api.put(`/schedule-of-rates/${id}`, data),
+  toggleSorStatus: (id, newStatus = null) => api.patch(`/schedule-of-rates/${id}/status`, null, { params: { new_status: newStatus } }),
+  getEditions: () => api.get('/schedule-of-rates/editions'),
+  createEdition: (data) => api.post('/schedule-of-rates/editions', data),
+  updateEditionCostIndex: (editionId, costIndex, regionId = null) => api.put(`/schedule-of-rates/editions/${editionId}/cost-index`, null, { params: { cost_index: costIndex, region_id: regionId } }),
+  getRegions: () => api.get('/schedule-of-rates/regions'),
+  createRegion: (data) => api.post('/schedule-of-rates/regions', data),
+  lookupSorRate: (params) => api.get('/schedule-of-rates/lookup', { params }),
+  importPreview: (formData) => api.post('/schedule-of-rates/import-preview', formData),
+  importCommit: (items) => api.post('/schedule-of-rates/import-commit', { items }),
+};
+
+export const estimationService = {
+  getEstimateByProject: (projectId) => api.get(`/estimation/project/${projectId}`),
+  saveEstimate: (data) => api.post('/estimation/save', data),
+  submitForReview: (estimateId) => api.post(`/estimation/submit-review/${estimateId}`),
+  approveTs: (estimateId) => api.post(`/estimation/approve-ts/${estimateId}`),
+  createRevisedDe: (estimateId) => api.post(`/estimation/create-revised-de/${estimateId}`),
+  getEstimatesList: () => api.get('/estimation/list'),
+};
+
+export const contractorAwardsService = {
+  getReadyProjects: () => api.get('/contractor-awards/ready-projects'),
+  getAwards: (params = {}) => api.get('/contractor-awards', { params }),
+  getAwardById: (id) => api.get(`/contractor-awards/${id}`),
+  createAward: (data) => api.post('/contractor-awards', data),
+  updateAward: (id, data) => api.put(`/contractor-awards/${id}`, data),
+  submitForApproval: (id) => api.post(`/contractor-awards/${id}/submit`),
+  finalizeAward: (id) => api.post(`/contractor-awards/${id}/finalize`),
+  cancelAward: (id) => api.post(`/contractor-awards/${id}/cancel`),
+};
+
+export const workOrderService = {
+  getEligibleAwards: () => api.get('/work-orders/eligible-awards'),
+  getWorkOrders: (params = {}) => api.get('/work-orders', { params }),
+  getWorkOrderById: (id) => api.get(`/work-orders/${id}`),
+  createWorkOrder: (data) => api.post('/work-orders', data),
+  updateWorkOrder: (id, data) => api.put(`/work-orders/${id}`, data),
+  issueWorkOrder: (id) => api.post(`/work-orders/${id}/issue`),
+  cancelWorkOrder: (id, reason) => api.post(`/work-orders/${id}/cancel`, { cancellation_reason: reason }),
+};
+
+export const workPlanService = {
+  getWorkPlans: (params = {}) => api.get('/work-plans', { params }),
+  getWorkPlanById: (id) => api.get(`/work-plans/${id}`),
+  createWorkPlan: (data) => api.post('/work-plans', data),
+  updateWorkPlan: (id, data) => api.put(`/work-plans/${id}`, data),
+  deleteWorkPlan: (id) => api.delete(`/work-plans/${id}`),
+  getBoqMappings: (wpId) => api.get(`/work-plans/${wpId}/boq-mappings`),
+  getEligibleBoqItems: (wpId) => api.get(`/work-plans/${wpId}/eligible-boq-items`),
+  createBoqMapping: (wpId, data) => api.post(`/work-plans/${wpId}/boq-mappings`, data),
+  updateBoqMapping: (mappingId, data) => api.put(`/work-plans/boq-mappings/${mappingId}`, data),
+  deleteBoqMapping: (mappingId) => api.delete(`/work-plans/boq-mappings/${mappingId}`),
+};
+
+export const userService = {
+  getUsers: () => api.get('/auth/users'),
+};
+
+export const taskAssignmentService = {
+  getAssignments: (params = {}) => api.get('/task-assignments', { params }),
+  getAssignmentById: (id) => api.get(`/task-assignments/${id}`),
+  createAssignment: (data) => api.post('/task-assignments', data),
+  updateAssignment: (id, data) => api.put(`/task-assignments/${id}`, data),
+  reassignTask: (id, data) => api.post(`/task-assignments/${id}/reassign`, data),
+  deleteAssignment: (id) => api.delete(`/task-assignments/${id}`),
+};
+
+export const projectTeamService = {
+  getEligibleUsers: () => api.get('/project-teams/eligible-users'),
+  getProjectTeam: (projectId) => api.get(`/project-teams/project/${projectId}`),
+  getTeamMemberDetail: (memberId) => api.get(`/project-teams/${memberId}`),
+  createTeamMember: (data) => api.post('/project-teams', data),
+  updateTeamMember: (memberId, data) => api.put(`/project-teams/${memberId}`, data),
+  toggleMemberStatus: (memberId) => api.post(`/project-teams/${memberId}/toggle-status`),
+  removeTeamMember: (memberId) => api.delete(`/project-teams/${memberId}`),
 };
 
 export const systemService = {

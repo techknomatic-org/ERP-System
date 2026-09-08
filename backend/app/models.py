@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, Date, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -317,23 +317,57 @@ class PropertyPayment(Base):
 
 # --- PHASE 3 MODELS ---
 
+class Division(Base):
+    __tablename__ = "divisions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_name = Column(String(100), default="Default Tenant", nullable=False)
+    name = Column(String(100), nullable=False)
+    code = Column(String(50), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class TenantSetting(Base):
+    __tablename__ = "tenant_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_name = Column(String(100), default="Default Tenant", nullable=False, unique=True)
+    is_p2_enabled = Column(Boolean, default=False)
+    is_funding_mode_enabled = Column(Boolean, default=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 class Project(Base):
     __tablename__ = "projects"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_name = Column(String(100), default="Default Tenant", nullable=False)
     name = Column(String(150), nullable=False)
     code = Column(String(50), unique=True, nullable=False, index=True)
+    division_id = Column(Integer, ForeignKey("divisions.id"), nullable=True)
+    division_name = Column(String(100), nullable=True)
+    contract_type = Column(String(50), default="Item Rate", nullable=False)
+    funding_mode = Column(String(50), default="Budgeted", nullable=False)
     client_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
     manager_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     location = Column(String(255), nullable=False)
+    latitude = Column(Numeric(10, 8), nullable=True)
+    longitude = Column(Numeric(11, 8), nullable=True)
     start_date = Column(DateTime, nullable=False)
     end_date = Column(DateTime, nullable=False)
+    contract_duration_days = Column(Integer, default=0, nullable=False)
+    sor_edition_id = Column(Integer, ForeignKey("sor_editions.id"), nullable=True)
+    sor_edition_name = Column(String(100), nullable=True)
+    sor_region_id = Column(Integer, ForeignKey("sor_regions.id"), nullable=True)
+    sor_region_name = Column(String(100), nullable=True)
     budget = Column(Numeric(14, 2), nullable=False)
     actual_cost = Column(Numeric(14, 2), default=0.00)
-    status = Column(String(30), default="active")
+    status = Column(String(30), default="DRAFT")
     progress_pct = Column(Numeric(5, 2), default=0.00)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    division = relationship("Division")
+    sor_edition = relationship("SorEdition")
+    sor_region = relationship("SorRegion")
     client = relationship("Customer")
     manager = relationship("User")
     tasks = relationship("WbsTask", back_populates="project", cascade="all, delete-orphan")
@@ -345,6 +379,7 @@ class WbsTask(Base):
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     parent_task_id = Column(Integer, ForeignKey("wbs_tasks.id"), nullable=True)
+    wbs_code = Column(String(50), nullable=True)
     title = Column(String(150), nullable=False)
     task_level = Column(String(20), default="Task")
     predecessor_id = Column(Integer, ForeignKey("wbs_tasks.id"), nullable=True)
@@ -367,6 +402,9 @@ class SiteDailyLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    phase_id = Column(Integer, ForeignKey("wbs_tasks.id"), nullable=True)
+    task_id = Column(Integer, ForeignKey("wbs_tasks.id"), nullable=True)
+    subtask_id = Column(Integer, ForeignKey("wbs_tasks.id"), nullable=True)
     engineer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     log_date = Column(DateTime, default=datetime.utcnow)
     physical_progress = Column(Text, nullable=False)
@@ -383,7 +421,65 @@ class SiteDailyLog(Base):
 
     project = relationship("Project", back_populates="site_logs")
     engineer = relationship("User")
-    wbs_task = relationship("WbsTask")
+    wbs_task = relationship("WbsTask", foreign_keys=[wbs_task_id])
+    phase = relationship("WbsTask", foreign_keys=[phase_id])
+    task = relationship("WbsTask", foreign_keys=[task_id])
+    subtask = relationship("WbsTask", foreign_keys=[subtask_id])
+    boq_item = relationship("BoqItem")
+    photos = relationship("SiteLogPhoto", back_populates="site_log", cascade="all, delete-orphan")
+    daily_tasks = relationship("DailyTaskMonitoring", back_populates="daily_site_log", cascade="all, delete-orphan")
+
+
+class DailyTaskMonitoring(Base):
+    __tablename__ = "daily_task_monitoring"
+
+    id = Column(Integer, primary_key=True, index=True)
+    daily_site_log_id = Column(Integer, ForeignKey("site_daily_logs.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    work_plan_id = Column(Integer, ForeignKey("work_plans.id", ondelete="CASCADE"), nullable=False, index=True)
+    boq_mapping_id = Column(Integer, ForeignKey("work_plan_boq_mappings.id", ondelete="SET NULL"), nullable=True)
+    boq_item_id = Column(Integer, ForeignKey("boq_items.id", ondelete="SET NULL"), nullable=True)
+    log_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+    task_status = Column(String(30), default="NOT STARTED", nullable=False)
+    executed_quantity = Column(Numeric(14, 2), default=0.00, nullable=False)
+    unit = Column(String(30), nullable=False)
+    execution_notes = Column(Text, nullable=True)
+    delay_reason = Column(Text, nullable=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    daily_site_log = relationship("SiteDailyLog", back_populates="daily_tasks")
+    project = relationship("Project")
+    work_plan = relationship("WorkPlan")
+    boq_mapping = relationship("WorkPlanBoqMapping")
+    boq_item = relationship("BoqItem")
+    created_by = relationship("User")
+
+class SiteLogPhoto(Base):
+    __tablename__ = "site_log_photos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    site_log_id = Column(Integer, ForeignKey("site_daily_logs.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    phase_id = Column(Integer, ForeignKey("wbs_tasks.id", ondelete="SET NULL"), nullable=True)
+    task_id = Column(Integer, ForeignKey("wbs_tasks.id", ondelete="SET NULL"), nullable=True)
+    subtask_id = Column(Integer, ForeignKey("wbs_tasks.id", ondelete="SET NULL"), nullable=True)
+    boq_item_id = Column(Integer, ForeignKey("boq_items.id", ondelete="SET NULL"), nullable=True)
+    file_name = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    file_size = Column(Integer, default=0)
+    file_type = Column(String(50), nullable=True)
+    caption = Column(Text, nullable=True)
+    uploaded_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    site_log = relationship("SiteDailyLog", back_populates="photos")
+    project = relationship("Project")
+    uploaded_by = relationship("User")
+    phase = relationship("WbsTask", foreign_keys=[phase_id])
+    task = relationship("WbsTask", foreign_keys=[task_id])
+    subtask = relationship("WbsTask", foreign_keys=[subtask_id])
     boq_item = relationship("BoqItem")
 
 # --- PHASE 4 MODELS ---
@@ -536,6 +632,7 @@ class BoqItem(Base):
     vendor_id = Column(Integer, ForeignKey("vendors.id"), nullable=True)
     contractor_name = Column(String(100), nullable=True)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    sor_id = Column(Integer, ForeignKey("schedule_of_rates.id", ondelete="SET NULL"), nullable=True)
     status = Column(String(30), default="ACTIVE")
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -545,6 +642,7 @@ class BoqItem(Base):
     subtask = relationship("WbsTask", foreign_keys=[subtask_id])
     vendor = relationship("Vendor")
     created_by = relationship("User")
+    sor = relationship("ScheduleOfRates")
     mb_records = relationship("MeasurementBook", back_populates="boq_item", cascade="all, delete-orphan")
 
 class MeasurementBook(Base):
@@ -553,6 +651,7 @@ class MeasurementBook(Base):
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     boq_item_id = Column(Integer, ForeignKey("boq_items.id"), nullable=False)
+    site_log_id = Column(Integer, ForeignKey("site_daily_logs.id", ondelete="CASCADE"), nullable=True)
     phase_id = Column(Integer, ForeignKey("wbs_tasks.id"), nullable=True)
     task_id = Column(Integer, ForeignKey("wbs_tasks.id"), nullable=True)
     subtask_id = Column(Integer, ForeignKey("wbs_tasks.id"), nullable=True)
@@ -567,6 +666,7 @@ class MeasurementBook(Base):
 
     project = relationship("Project")
     boq_item = relationship("BoqItem", back_populates="mb_records")
+    site_log = relationship("SiteDailyLog")
     engineer = relationship("User")
     phase = relationship("WbsTask", foreign_keys=[phase_id])
     task = relationship("WbsTask", foreign_keys=[task_id])
@@ -588,6 +688,13 @@ class ContractorBill(Base):
     discrepancy_flag = Column(Boolean, default=False)
     discrepancy_reason = Column(Text, nullable=True)
     status = Column(String(30), default="pending_verification")
+    sor_edition_name = Column(String(100), nullable=True)
+    sor_region_name = Column(String(100), nullable=True)
+    sor_code = Column(String(50), nullable=True)
+    base_rate = Column(Numeric(12, 2), nullable=True)
+    cost_index = Column(Numeric(8, 4), nullable=True)
+    adjusted_rate = Column(Numeric(12, 2), nullable=True)
+    snapshot_timestamp = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     project = relationship("Project")
@@ -904,3 +1011,306 @@ class OcrDocument(Base):
     uploaded_by = relationship("User")
     project = relationship("Project")
     vendor = relationship("Vendor")
+
+class SorEdition(Base):
+    __tablename__ = "sor_editions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    effective_date = Column(DateTime, nullable=True)
+    status = Column(String(20), default="Active", nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class SorRegion(Base):
+    __tablename__ = "sor_regions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(50), nullable=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    status = Column(String(20), default="Active", nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class ScheduleOfRates(Base):
+    __tablename__ = "schedule_of_rates"
+    __table_args__ = (
+        UniqueConstraint("sor_edition_id", "sor_code", name="uix_edition_sor_code"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    sor_edition_id = Column(Integer, ForeignKey("sor_editions.id"), nullable=False)
+    sor_region_id = Column(Integer, ForeignKey("sor_regions.id"), nullable=False)
+    sor_edition_name = Column(String(100), nullable=True)
+    sor_region_name = Column(String(100), nullable=True)
+    sor_code = Column(String(50), nullable=False, index=True)
+    description = Column(Text, nullable=False)
+    category = Column(String(50), nullable=False, index=True)
+    unit = Column(String(30), nullable=False)
+    base_rate = Column(Numeric(12, 2), nullable=False)
+    cost_index = Column(Numeric(8, 4), default=1.0000, nullable=False)
+    rate = Column(Numeric(12, 2), nullable=False)  # Preserved column, adjusted rate = base_rate * cost_index
+    effective_from = Column(DateTime, nullable=False)
+    status = Column(String(20), default="Active", nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    sor_edition = relationship("SorEdition")
+    sor_region = relationship("SorRegion")
+
+    @property
+    def adjusted_rate(self) -> float:
+        b_rate = float(self.base_rate or self.rate or 0.0)
+        c_index = float(self.cost_index if self.cost_index is not None else 1.0)
+        return round(b_rate * c_index, 2)
+
+
+class ProjectEstimate(Base):
+    __tablename__ = "project_estimates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    estimate_number = Column(String(50), unique=True, nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    status = Column(String(30), default="DRAFT")
+    base_amount = Column(Numeric(14, 2), default=0.00)
+    contingency_percent = Column(Numeric(5, 2), default=5.00)
+    contingency_amount = Column(Numeric(14, 2), default=0.00)
+    departmental_charges_percent = Column(Numeric(5, 2), default=2.00)
+    departmental_charges_amount = Column(Numeric(14, 2), default=0.00)
+    total_amount = Column(Numeric(14, 2), default=0.00)
+    is_ee_review_required = Column(Boolean, default=False)
+    ee_review_reason = Column(Text, nullable=True)
+    ts_status = Column(String(30), default="PENDING")  # "PENDING", "SUBMITTED", "APPROVED", "REJECTED"
+    is_ts_locked = Column(Boolean, default=False)
+    revision_number = Column(Integer, default=0)
+    original_estimate_id = Column(Integer, ForeignKey("project_estimates.id"), nullable=True)
+    is_revised = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = relationship("Project")
+    lines = relationship("ProjectEstimateLine", back_populates="estimate", cascade="all, delete-orphan")
+    original_estimate = relationship("ProjectEstimate", remote_side=[id])
+
+class ProjectEstimateLine(Base):
+    __tablename__ = "project_estimate_lines"
+
+    id = Column(Integer, primary_key=True, index=True)
+    estimate_id = Column(Integer, ForeignKey("project_estimates.id", ondelete="CASCADE"), nullable=False)
+    boq_item_id = Column(Integer, ForeignKey("boq_items.id"), nullable=False)
+    sor_item_id = Column(Integer, ForeignKey("schedule_of_rates.id"), nullable=True)
+    rate_source = Column(String(30), default="SOR")  # "SOR", "NON_SOR", "MANUAL_OVERRIDE"
+    quantity = Column(Numeric(12, 3), nullable=False, default=0.000)
+    manual_rate = Column(Numeric(12, 2), nullable=True)
+    is_manual_override = Column(Boolean, default=False)
+    justification_note = Column(Text, nullable=True)
+    sor_rate_snapshot = Column(Numeric(12, 2), nullable=True)
+    estimated_amount = Column(Numeric(14, 2), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    estimate = relationship("ProjectEstimate", back_populates="lines")
+    boq_item = relationship("BoqItem")
+    sor_item = relationship("ScheduleOfRates")
+
+class ContractorAward(Base):
+    __tablename__ = "contractor_awards"
+
+    id = Column(Integer, primary_key=True, index=True)
+    award_reference = Column(String(50), unique=True, nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    estimate_id = Column(Integer, ForeignKey("project_estimates.id"), nullable=False)
+    contractor_id = Column(Integer, ForeignKey("vendors.id"), nullable=False)
+    estimated_amount = Column(Numeric(14, 2), nullable=False)
+    award_amount = Column(Numeric(14, 2), nullable=False)
+    variance_amount = Column(Numeric(14, 2), nullable=False)
+    variance_percentage = Column(Numeric(8, 2), nullable=False)
+    award_date = Column(DateTime, nullable=False)
+    start_date = Column(DateTime, nullable=False)
+    completion_date = Column(DateTime, nullable=False)
+    status = Column(String(30), default="DRAFT", nullable=False)
+    remarks = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = relationship("Project")
+    estimate = relationship("ProjectEstimate")
+    contractor = relationship("Vendor")
+
+
+class WorkOrder(Base):
+    __tablename__ = "work_orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    work_order_number = Column(String(50), unique=True, nullable=False, index=True)
+    award_id = Column(Integer, ForeignKey("contractor_awards.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    contractor_id = Column(Integer, ForeignKey("vendors.id"), nullable=False)
+    issue_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+    scope_of_work = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    work_order_value = Column(Numeric(14, 2), nullable=False)
+    start_date = Column(DateTime, nullable=False)
+    completion_date = Column(DateTime, nullable=False)
+    payment_terms = Column(Text, nullable=True)
+    terms_conditions = Column(Text, nullable=True)
+    remarks = Column(Text, nullable=True)
+    cancellation_reason = Column(Text, nullable=True)
+    included_packages = Column(Text, nullable=True)
+    status = Column(String(30), default="DRAFT", nullable=False) # DRAFT, ISSUED, ACTIVE, COMPLETED, CANCELLED
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    award = relationship("ContractorAward")
+    project = relationship("Project")
+    contractor = relationship("Vendor")
+    created_by = relationship("User")
+
+
+class WorkPlan(Base):
+    __tablename__ = "work_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    work_plan_number = Column(String(50), unique=True, nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    wbs_phase_id = Column(Integer, ForeignKey("wbs_tasks.id"), nullable=False)
+    task_id = Column(Integer, ForeignKey("wbs_tasks.id"), nullable=False)
+    subtask_id = Column(Integer, ForeignKey("wbs_tasks.id"), nullable=True)
+    activity_name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    planned_quantity = Column(Numeric(14, 2), nullable=False, default=0.00)
+    unit = Column(String(30), nullable=False, default="m³")
+    planned_start_date = Column(DateTime, nullable=False)
+    planned_end_date = Column(DateTime, nullable=False)
+    priority = Column(String(20), default="MEDIUM", nullable=False)
+    dependency_id = Column(Integer, ForeignKey("work_plans.id"), nullable=True)
+    responsible_team_id = Column(Integer, nullable=True)
+    responsible_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    remarks = Column(Text, nullable=True)
+    status = Column(String(30), default="NOT STARTED", nullable=False)
+    is_archived = Column(Boolean, default=False, nullable=False)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = relationship("Project")
+    wbs_phase = relationship("WbsTask", foreign_keys=[wbs_phase_id])
+    wbs_task = relationship("WbsTask", foreign_keys=[task_id])
+    wbs_subtask = relationship("WbsTask", foreign_keys=[subtask_id])
+    dependency = relationship("WorkPlan", remote_side=[id], foreign_keys=[dependency_id])
+    responsible_user = relationship("User", foreign_keys=[responsible_user_id])
+    created_by = relationship("User", foreign_keys=[created_by_id])
+
+
+class WorkPlanBoqMapping(Base):
+    __tablename__ = "work_plan_boq_mappings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    work_plan_id = Column(Integer, ForeignKey("work_plans.id", ondelete="CASCADE"), nullable=False)
+    boq_item_id = Column(Integer, ForeignKey("boq_items.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    mapped_quantity = Column(Numeric(14, 2), nullable=False)
+    unit = Column(String(30), nullable=False)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    work_plan = relationship("WorkPlan")
+    boq_item = relationship("BoqItem")
+    project = relationship("Project")
+    created_by = relationship("User")
+
+
+class TaskAssignment(Base):
+    __tablename__ = "task_assignments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    assignment_ref = Column(String(50), unique=True, index=True, nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    wbs_phase_id = Column(Integer, ForeignKey("wbs_tasks.id", ondelete="CASCADE"), nullable=False)
+    task_id = Column(Integer, ForeignKey("wbs_tasks.id", ondelete="CASCADE"), nullable=False)
+    subtask_id = Column(Integer, ForeignKey("wbs_tasks.id", ondelete="SET NULL"), nullable=True)
+    assigned_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String(100), nullable=True)
+    priority = Column(String(20), default="MEDIUM", nullable=False)
+    start_date = Column(Date, nullable=False)
+    due_date = Column(Date, nullable=False)
+    status = Column(String(30), default="ASSIGNED", nullable=False)
+    remarks = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = relationship("Project")
+    wbs_phase = relationship("WbsTask", foreign_keys=[wbs_phase_id])
+    task = relationship("WbsTask", foreign_keys=[task_id])
+    subtask = relationship("WbsTask", foreign_keys=[subtask_id])
+    assigned_user = relationship("User", foreign_keys=[assigned_user_id])
+    created_by = relationship("User", foreign_keys=[created_by_id])
+    audits = relationship("TaskAssignmentAudit", back_populates="assignment", cascade="all, delete-orphan")
+
+
+class TaskAssignmentAudit(Base):
+    __tablename__ = "task_assignment_audits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    assignment_id = Column(Integer, ForeignKey("task_assignments.id", ondelete="CASCADE"), nullable=False)
+    action = Column(String(50), nullable=False)
+    previous_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    new_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    changed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    remarks = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    assignment = relationship("TaskAssignment", back_populates="audits")
+    previous_user = relationship("User", foreign_keys=[previous_user_id])
+    new_user = relationship("User", foreign_keys=[new_user_id])
+    changed_by = relationship("User", foreign_keys=[changed_by_user_id])
+
+
+class ProjectTeamMember(Base):
+    __tablename__ = "project_team_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_role = Column(String(100), nullable=False)
+    department = Column(String(100), nullable=True)
+    responsibility = Column(Text, nullable=True)
+    joining_date = Column(Date, nullable=True)
+    status = Column(String(20), default="ACTIVE", nullable=False)
+    remarks = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = relationship("Project")
+    user = relationship("User", foreign_keys=[user_id])
+    created_by = relationship("User", foreign_keys=[created_by_id])
+    audits = relationship("ProjectTeamAudit", back_populates="team_member", cascade="all, delete-orphan")
+
+
+class ProjectTeamAudit(Base):
+    __tablename__ = "project_team_audits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    team_member_id = Column(Integer, ForeignKey("project_team_members.id", ondelete="CASCADE"), nullable=False)
+    action = Column(String(50), nullable=False)
+    changed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    remarks = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    team_member = relationship("ProjectTeamMember", back_populates="audits")
+    changed_by = relationship("User", foreign_keys=[changed_by_user_id])
+
+
+
+
+
+
+
+
