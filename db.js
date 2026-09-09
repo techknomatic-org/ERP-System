@@ -49,7 +49,7 @@ const seedData = {
             username: 'admin',
             email: 'admin@erp.com',
             full_name: 'System Administrator',
-            hashed_password: '$2b$12$eWzX...hashpassword',
+            hashed_password: '$2b$12$rbnoD/CNA.9caZIAAKqETev3FLbImsHxAfK6FVmGe27jChSeHswtC',
             role: 'admin',
             is_active: 1
         },
@@ -963,7 +963,7 @@ async function seedDatabase() {
 
     let connection;
     console.log(`🔌 Connecting to MySQL database '${dbConfig.database}' on ${dbConfig.host}:${dbConfig.port}...`);
-    
+
     try {
         connection = await mysql.createConnection(dbConfig);
         console.log('✅ Connected successfully to MySQL.');
@@ -979,7 +979,7 @@ async function seedDatabase() {
 
             const columns = Object.keys(rows[0]);
             const colNamesStr = columns.map(col => `\`${col}\``).join(', ');
-            
+
             for (const row of rows) {
                 const values = columns.map(col => row[col]);
                 const placeholders = columns.map(() => '?').join(', ');
