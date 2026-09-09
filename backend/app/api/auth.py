@@ -121,10 +121,12 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
             "admin": ("admin", "admin@erp.com", "System Administrator", "admin", "admin123"),
             "pm@erp.local": ("pm", "pm@erp.local", "Project Manager", "project_manager", "pm123"),
             "pm": ("pm", "pm@erp.local", "Project Manager", "project_manager", "pm123"),
+            "engineer@erp.local": ("engineer", "engineer@erp.local", "Lead Site Engineer", "site_engineer", "engineer123"),
             "site@erp.local": ("site", "site@erp.local", "Site Engineer", "site_engineer", "site123"),
             "site": ("site", "site@erp.local", "Site Engineer", "site_engineer", "site123"),
             "finance@erp.local": ("finance", "finance@erp.local", "Finance Lead", "finance", "finance123"),
             "finance": ("finance", "finance@erp.local", "Finance Lead", "finance", "finance123"),
+            "customer@erp.local": ("customer_user", "customer@erp.local", "Customer Account", "customer", "customer123"),
             "customer@abccorp.com": ("customer", "customer@abccorp.com", "ABC Customer Account", "customer", "customer123"),
             "customer": ("customer", "customer@abccorp.com", "ABC Customer Account", "customer", "customer123"),
         }

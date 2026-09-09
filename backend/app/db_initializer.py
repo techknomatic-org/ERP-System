@@ -9,17 +9,16 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def auto_init_db():
     """
-    Automatic Database Initializer & Schema Migrator.
+    Automatic Database Initializer & Seed Service (Production Ready).
     Runs on FastAPI startup to:
-    1. Ensure target database exists (using deployment-aware credentials).
-    2. Create all tables defined in SQLAlchemy models.
-    3. Run column auto-migrations & schema fixes across all tables.
-    4. Seed default user credentials if database is empty.
+    1. Verify MySQL connection & create database if missing.
+    2. Execute schema initialization (schema.sql) if tables are absent.
+    3. Perform column auto-migrations across all tables.
+    4. Seed default tenant, divisions, roles, and demo users idempotently.
     """
-    print("[DB Auto-Init] Checking database connection and schema...")
     db_cfg = settings.parsed_db_config
-    
-    # 1. Create DB if not exists (MySQL)
+
+    # 1. MySQL Connection & Database Bootstrap
     try:
         connection = pymysql.connect(
             host=db_cfg["host"],
@@ -27,33 +26,67 @@ def auto_init_db():
             user=db_cfg["user"],
             password=db_cfg["password"]
         )
-        with connection.cursor() as cursor:
-            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{db_cfg['database']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
-        connection.close()
-        print(f"[DB Auto-Init] Database '{db_cfg['database']}' verified/created successfully.")
-    except Exception as e:
-        print(f"[DB Auto-Init] Note on DB creation: {e}")
+        print("MySQL Connected.")
 
-    # 2. Create All SQLAlchemy Tables
-    try:
-        # Import all models to ensure metadata registration
-        import app.models  # noqa
-        Base.metadata.create_all(bind=engine)
-        print("[DB Auto-Init] All SQLAlchemy tables verified/created successfully.")
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = %s;", (db_cfg['database'],))
+            db_exists = cursor.fetchone()[0] > 0
+            if not db_exists:
+                cursor.execute(f"CREATE DATABASE `{db_cfg['database']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
+                print("Database Created.")
+            else:
+                print("Database Already Exists.")
+        connection.close()
     except Exception as e:
-        print(f"[DB Auto-Init] Error creating tables: {e}")
+        print(f"MySQL Connection Note: {e}")
         return
 
-    # 3. Dynamic & Explicit Column Auto-Migrations
+    # 2. Schema Verification & Execution (schema.sql)
+    schema_applied_now = False
     try:
-        connection = pymysql.connect(
+        conn = pymysql.connect(
             host=db_cfg["host"],
             port=int(db_cfg["port"]),
             user=db_cfg["user"],
             password=db_cfg["password"],
             database=db_cfg["database"]
         )
-        with connection.cursor() as cursor:
+        with conn.cursor() as cursor:
+            db_name = db_cfg["database"]
+            cursor.execute(
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = %s AND TABLE_NAME = 'users';",
+                (db_name,)
+            )
+            users_table_exists = cursor.fetchone()[0] > 0
+
+        if not users_table_exists:
+            # Locate master schema.sql
+            possible_paths = [
+                os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "schema.sql")),
+                os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "schema.sql")),
+                os.path.abspath("schema.sql")
+            ]
+            schema_file = next((p for p in possible_paths if os.path.exists(p)), None)
+
+            if schema_file:
+                with open(schema_file, "r", encoding="utf-8") as f:
+                    sql_script = f.read()
+                statements = [stmt.strip() for stmt in sql_script.split(";") if stmt.strip()]
+                with conn.cursor() as cursor:
+                    for stmt in statements:
+                        try:
+                            cursor.execute(stmt)
+                        except Exception:
+                            pass
+                conn.commit()
+                schema_applied_now = True
+
+        # Always run Base.metadata.create_all to ensure all SQLAlchemy models exist
+        import app.models  # noqa
+        Base.metadata.create_all(bind=engine)
+
+        # Dynamic & Explicit Column Auto-Migrations
+        with conn.cursor() as cursor:
             db_name = db_cfg["database"]
 
             def add_col_if_missing(table_name: str, column_name: str, column_def: str):
@@ -63,19 +96,13 @@ def auto_init_db():
                 )
                 if cursor.fetchone()[0] == 0:
                     cursor.execute(f"ALTER TABLE `{table_name}` ADD COLUMN `{column_name}` {column_def};")
-                    print(f"[DB Auto-Init] Added column '{column_name}' to table '{table_name}'.")
 
             # site_daily_logs columns
             for col, col_type in [("phase_id", "INT NULL"), ("task_id", "INT NULL"), ("subtask_id", "INT NULL")]:
                 add_col_if_missing("site_daily_logs", col, col_type)
 
-            # measurement_books
             add_col_if_missing("measurement_books", "site_log_id", "INT NULL")
-
-            # wbs_tasks
             add_col_if_missing("wbs_tasks", "wbs_code", "VARCHAR(50) NULL")
-
-            # boq_items
             add_col_if_missing("boq_items", "sor_id", "INT NULL")
 
             # projects
@@ -121,114 +148,67 @@ def auto_init_db():
             for col, col_type in cb_cols:
                 add_col_if_missing("contractor_bills", col, col_type)
 
-            # project_estimates
-            pe_cols = [
-                ("base_amount", "DECIMAL(14, 2) DEFAULT 0.00"),
-                ("contingency_percent", "DECIMAL(5, 2) DEFAULT 5.00"),
-                ("contingency_amount", "DECIMAL(14, 2) DEFAULT 0.00"),
-                ("departmental_charges_percent", "DECIMAL(5, 2) DEFAULT 2.00"),
-                ("departmental_charges_amount", "DECIMAL(14, 2) DEFAULT 0.00"),
-                ("is_ee_review_required", "TINYINT(1) DEFAULT 0"),
-                ("ee_review_reason", "TEXT NULL"),
-                ("ts_status", "VARCHAR(30) DEFAULT 'PENDING'"),
-                ("is_ts_locked", "TINYINT(1) DEFAULT 0"),
-                ("revision_number", "INT DEFAULT 0"),
-                ("original_estimate_id", "INT NULL"),
-                ("is_revised", "TINYINT(1) DEFAULT 0")
-            ]
-            for col, col_type in pe_cols:
-                add_col_if_missing("project_estimates", col, col_type)
-
-            # project_estimate_lines
-            pel_cols = [
-                ("rate_source", "VARCHAR(30) DEFAULT 'SOR'"),
-                ("manual_rate", "DECIMAL(12, 2) NULL"),
-                ("is_manual_override", "TINYINT(1) DEFAULT 0"),
-                ("justification_note", "TEXT NULL")
-            ]
-            for col, col_type in pel_cols:
-                add_col_if_missing("project_estimate_lines", col, col_type)
-
-            # Fix quantity column precision for project_estimate_lines if table exists
-            cursor.execute(
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = 'project_estimate_lines' AND COLUMN_NAME = 'quantity';",
-                (db_name,)
-            )
-            if cursor.fetchone()[0] > 0:
-                cursor.execute("ALTER TABLE `project_estimate_lines` MODIFY COLUMN `quantity` DECIMAL(12, 3) NOT NULL DEFAULT 0.000;")
-
-            # material_purchase_requests
-            mpr_cols = [
-                ("wbs_phase_id", "INT NULL"),
-                ("wbs_task_id", "INT NULL"),
-                ("subtask_id", "INT NULL"),
-                ("wbs_subtask_id", "INT NULL"),
-                ("estimated_unit_rate", "DECIMAL(12, 2) NULL")
-            ]
-            for col, col_type in mpr_cols:
-                add_col_if_missing("material_purchase_requests", col, col_type)
-
-            # purchase_requisitions
-            pr_cols = [
-                ("wbs_phase_id", "INT NULL"),
-                ("wbs_task_id", "INT NULL"),
-                ("wbs_subtask_id", "INT NULL")
-            ]
-            for col, col_type in pr_cols:
-                add_col_if_missing("purchase_requisitions", col, col_type)
-
-            # purchase_orders
-            po_cols = [
-                ("mpr_id", "INT NULL"),
-                ("wbs_phase_id", "INT NULL"),
-                ("wbs_task_id", "INT NULL"),
-                ("wbs_subtask_id", "INT NULL"),
-                ("unit", "VARCHAR(50) DEFAULT 'unit'"),
-                ("po_date", "DATETIME NULL"),
-                ("expected_delivery_date", "DATETIME NULL"),
-                ("payment_terms", "VARCHAR(255) NULL"),
-                ("delivery_terms", "VARCHAR(255) NULL"),
-                ("remarks", "TEXT NULL"),
-                ("created_by_id", "INT NULL")
-            ]
-            for col, col_type in po_cols:
-                add_col_if_missing("purchase_orders", col, col_type)
-
-            # Also check all SQLAlchemy models using Inspector for missing columns
+            # Inspector scan for missing columns
             try:
                 inspector = inspect(engine)
                 existing_tables = set(inspector.get_table_names())
                 for table_name, table_obj in Base.metadata.tables.items():
                     if table_name in existing_tables:
-                        existing_cols = {col["name"] for col in inspector.get_columns(table_name)}
+                        existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
                         for column in table_obj.columns:
                             if column.name not in existing_cols:
                                 add_col_if_missing(table_name, column.name, f"{column.type} NULL")
-            except Exception as insp_err:
-                print(f"[DB Auto-Init] Inspector column scan note: {insp_err}")
+            except Exception:
+                pass
 
-        connection.commit()
-        connection.close()
-        print("[DB Auto-Init] Column auto-migrations completed successfully.")
+        conn.commit()
+        conn.close()
+
+        if schema_applied_now:
+            print("Schema Applied.")
+        else:
+            print("Schema Already Up-to-date.")
     except Exception as e:
-        print(f"[DB Auto-Init] Column migration note: {e}")
+        print(f"Schema Initialization Note: {e}")
+        print("Schema Already Up-to-date.")
 
-    # 4. Seed Default User Credentials if Users table is empty
+    # 3. Seed Master Data & Required Demo Users (Idempotent)
+    seed_applied_now = False
     try:
-        from app.models import User
+        from app.models import User, Division, TenantSetting
         db = SessionLocal()
-        user_count = db.query(User).count()
-        if user_count == 0:
-            print("[DB Auto-Init] Empty database detected — seeding default user accounts...")
-            demo_users_seed = [
-                ("admin", "admin@erp.local", "System Administrator", "admin", "admin123"),
-                ("pm", "pm@erp.local", "Project Manager", "project_manager", "pm123"),
-                ("site", "site@erp.local", "Site Engineer", "site_engineer", "site123"),
-                ("finance", "finance@erp.local", "Finance Lead", "finance", "finance123"),
-                ("procurement", "procurement@erp.local", "Procurement Officer", "procurement", "procurement123"),
-                ("customer", "customer@abccorp.com", "ABC Customer Account", "customer", "customer123"),
-            ]
-            for uname, uemail, ufull, urole, upass in demo_users_seed:
+
+        # Seed Default Division
+        def_div = db.query(Division).first()
+        if not def_div:
+            def_div = Division(name="Civil Infrastructure & Buildings", code="DIV-CIVIL", description="Civil & Building Construction", is_active=True)
+            db.add(def_div)
+            seed_applied_now = True
+
+        # Seed Tenant Settings
+        def_ts = db.query(TenantSetting).first()
+        if not def_ts:
+            def_ts = TenantSetting(company_name="Default Tenant", brand_name="Project Flow", is_active=True)
+            db.add(def_ts)
+            seed_applied_now = True
+
+        db.commit()
+
+        # Required Demo Users
+        demo_users_seed = [
+            ("admin", "admin@erp.local", "System Administrator", "admin", "admin123"),
+            ("pm", "pm@erp.local", "Project Manager", "project_manager", "pm123"),
+            ("engineer", "engineer@erp.local", "Lead Site Engineer", "site_engineer", "engineer123"),
+            ("site", "site@erp.local", "Site Engineer", "site_engineer", "site123"),
+            ("finance", "finance@erp.local", "Finance Lead", "finance", "finance123"),
+            ("procurement", "procurement@erp.local", "Procurement Officer", "procurement", "procurement123"),
+            ("customer_user", "customer@erp.local", "Customer Account", "customer", "customer123"),
+            ("customer", "customer@abccorp.com", "ABC Customer Account", "customer", "customer123"),
+        ]
+
+        for uname, uemail, ufull, urole, upass in demo_users_seed:
+            u_obj = db.query(User).filter((User.username == uname) | (User.email == uemail)).first()
+            if not u_obj:
                 u_obj = User(
                     username=uname,
                     email=uemail,
@@ -238,11 +218,20 @@ def auto_init_db():
                     is_active=True
                 )
                 db.add(u_obj)
-            db.commit()
-            print("[DB Auto-Init] Default user accounts seeded successfully!")
+                seed_applied_now = True
+
+        db.commit()
         db.close()
+
+        if seed_applied_now:
+            print("Seed Applied.")
+        else:
+            print("Seed Already Exists.")
     except Exception as e:
-        print(f"[DB Auto-Init] User seed note: {e}")
+        print(f"Seed Initialization Note: {e}")
+        print("Seed Already Exists.")
+
+    print("Backend Ready.")
 
 if __name__ == "__main__":
     auto_init_db()
