@@ -392,10 +392,13 @@ class WbsTask(Base):
     actual_cost = Column(Numeric(12, 2), default=0.00)
     progress_pct = Column(Numeric(5, 2), default=0.00)
     status = Column(String(30), default="not_started")
+    boq_item_id = Column(Integer, ForeignKey("boq_items.id", ondelete="SET NULL"), nullable=True)
+    is_published = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     project = relationship("Project", back_populates="tasks")
     subtasks = relationship("WbsTask", backref="parent_task", remote_side=[id], foreign_keys=[parent_task_id])
+    boq_item = relationship("BoqItem", foreign_keys=[boq_item_id])
 
 class SiteDailyLog(Base):
     __tablename__ = "site_daily_logs"

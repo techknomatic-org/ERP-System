@@ -425,6 +425,8 @@ class WbsTaskBase(BaseModel):
     wbs_code: Optional[str] = None
     title: str
     task_level: Optional[str] = "Task"
+    node_type: Optional[str] = None
+    boq_item_id: Optional[int] = None
     predecessor_id: Optional[int] = None
     contractor_name: Optional[str] = None
     start_date: datetime
@@ -440,6 +442,10 @@ class WbsTaskCreate(WbsTaskBase):
 class WbsTaskUpdate(BaseModel):
     wbs_code: Optional[str] = None
     title: Optional[str] = None
+    parent_task_id: Optional[int] = None
+    node_type: Optional[str] = None
+    task_level: Optional[str] = None
+    boq_item_id: Optional[int] = None
     contractor_name: Optional[str] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
@@ -451,6 +457,8 @@ class WbsTaskResponse(WbsTaskBase):
     id: int
     progress_pct: Optional[float] = 0.0
     status: Optional[str] = "not_started"
+    is_published: Optional[bool] = False
+    boq_item_name: Optional[str] = None
     created_at: datetime
     required_till_now: Optional[float] = 0.0
     remaining_budget: Optional[float] = 0.0

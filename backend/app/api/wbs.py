@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from app.database import get_db
 from app.models import WbsTask, Project, BoqItem, AuditLog
 from app.schemas import WbsTaskCreate, WbsTaskResponse, WbsTaskUpdate
@@ -8,6 +8,23 @@ from app.schemas import WbsTaskCreate, WbsTaskResponse, WbsTaskUpdate
 import datetime
 
 router = APIRouter(prefix="/api/wbs", tags=["WBS Hierarchy & Gantt Timeline"])
+
+def to_date(val):
+    if val is None:
+        return None
+    if isinstance(val, datetime.date) and not isinstance(val, datetime.datetime):
+        return val
+    if isinstance(val, datetime.datetime):
+        return val.date()
+    if isinstance(val, str):
+        try:
+            return datetime.datetime.fromisoformat(val.replace('Z', '+00:00')).date()
+        except Exception:
+            try:
+                return datetime.datetime.strptime(val[:10], '%Y-%m-%d').date()
+            except Exception:
+                return None
+    return None
 
 def calculate_node_status_and_progress(start_date, end_date, executed_qty: float, planned_qty: float, fallback_prog: float = 0.0):
     """
@@ -26,8 +43,8 @@ def calculate_node_status_and_progress(start_date, end_date, executed_qty: float
     """
     today = datetime.date.today()
 
-    s_date = start_date.date() if isinstance(start_date, datetime.datetime) else start_date
-    e_date = end_date.date() if isinstance(end_date, datetime.datetime) else end_date
+    s_date = to_date(start_date)
+    e_date = to_date(end_date)
 
     has_inconsistency = False
     warning = None
@@ -66,6 +83,7 @@ def calculate_node_status_and_progress(start_date, end_date, executed_qty: float
         status = "not_started"
 
     return eff_prog, status, has_inconsistency, warning
+
 
 def recalculate_project_wbs(db: Session, project_id: int):
     all_tasks = db.query(WbsTask).filter(WbsTask.project_id == project_id).all()
@@ -112,10 +130,10 @@ def recalculate_project_wbs(db: Session, project_id: int):
             task.has_date_inconsistency = has_inc
             task.inconsistency_warning = warn
 
-    # Step 1: Calculate Tasks progress from direct Subtasks (bottom-up)
-    tasks_level = [t for t in all_tasks if (t.task_level or "").lower() == "task"]
+    # Step 1: Calculate Tasks/Activities progress from direct Subtasks (bottom-up)
+    tasks_level = [t for t in all_tasks if (t.task_level or "").lower() in ["task", "activity"]]
     for task in tasks_level:
-        direct_subtasks = [s for s in all_tasks if (s.task_level or "").lower() == "subtask" and s.parent_task_id == task.id]
+        direct_subtasks = [s for s in all_tasks if s.parent_task_id == task.id]
         if direct_subtasks:
             avg_subtask_prog = sum(float(s.progress_pct or 0.0) for s in direct_subtasks) / len(direct_subtasks)
             subtask_starts = [s.start_date for s in direct_subtasks if s.start_date]
@@ -134,10 +152,10 @@ def recalculate_project_wbs(db: Session, project_id: int):
             task.has_date_inconsistency = has_inc or any(getattr(s, 'has_date_inconsistency', False) for s in direct_subtasks)
             task.inconsistency_warning = warn
 
-    # Step 2: Calculate Phases progress from direct Tasks (bottom-up)
-    phases = [p for p in all_tasks if (p.task_level or "").lower() == "phase" or (not p.parent_task_id and (p.task_level or "").lower() != "subtask")]
+    # Step 2: Calculate Phases progress from direct child nodes (bottom-up)
+    phases = [p for p in all_tasks if (p.task_level or "").lower() == "phase" or not p.parent_task_id]
     for phase in phases:
-        direct_tasks = [t for t in all_tasks if (t.task_level or "").lower() == "task" and t.parent_task_id == phase.id]
+        direct_tasks = [t for t in all_tasks if t.parent_task_id == phase.id]
         if direct_tasks:
             avg_task_prog = sum(float(t.progress_pct or 0.0) for t in direct_tasks) / len(direct_tasks)
             task_starts = [t.start_date for t in direct_tasks if t.start_date]
@@ -283,8 +301,102 @@ def get_project_wbs_tasks(project_id: int, db: Session = Depends(get_db)):
         t.linked_boqs = boq_list
         t.has_date_inconsistency = getattr(t, 'has_date_inconsistency', False)
         t.inconsistency_warning = getattr(t, 'inconsistency_warning', None)
+        t.is_published = getattr(t, 'is_published', False)
+        
+        if getattr(t, 'boq_item_id', None) and not boq_list:
+            b_item = db.query(BoqItem).filter(BoqItem.id == t.boq_item_id).first()
+            if b_item:
+                t.boq_item_name = b_item.item_name
+                t.linked_boqs = [{
+                    "id": b_item.id,
+                    "item_name": b_item.item_name,
+                    "unit": b_item.unit,
+                    "approved_qty": float(b_item.approved_qty or 0),
+                    "executed_qty": 0.0,
+                    "remaining_qty": float(b_item.approved_qty or 0),
+                    "progress_pct": 0.0,
+                    "rate": float(b_item.rate or 0),
+                    "total_amount": float(b_item.total_amount or 0),
+                    "contractor_name": b_item.contractor_name or "Unassigned"
+                }]
+        elif boq_list:
+            t.boq_item_name = boq_list[0].get("item_name")
 
     return tasks
+
+def validate_no_circular_parent(db: Session, node_id: Optional[int], proposed_parent_id: Optional[int]):
+    """
+    Rule 1 — Tree Structure / Circular Reference Protection:
+    Traverse proposed parent chain to ensure node never becomes its own ancestor.
+    """
+    if not proposed_parent_id:
+        return
+    if node_id and proposed_parent_id == node_id:
+        raise HTTPException(status_code=400, detail="Circular parent assignment is not allowed.")
+    
+    current_id = proposed_parent_id
+    visited = set()
+    if node_id:
+        visited.add(node_id)
+    
+    while current_id:
+        if current_id in visited:
+            raise HTTPException(status_code=400, detail="Circular parent assignment is not allowed.")
+        visited.add(current_id)
+        parent_node = db.query(WbsTask).filter(WbsTask.id == current_id).first()
+        if not parent_node:
+            break
+        current_id = parent_node.parent_task_id
+
+def validate_node_date_range(db: Session, node_id: Optional[int], parent_id: Optional[int], start_date, end_date):
+    """
+    Rule 2 — Child Date Range Validation:
+    Enforce node.start_date <= node.end_date and parent.start_date <= child.start_date <= child.end_date <= parent.end_date.
+    Also revalidate existing children if parent's date range is modified.
+    """
+    s_date = to_date(start_date)
+    e_date = to_date(end_date)
+
+    if s_date and e_date and s_date > e_date:
+        raise HTTPException(status_code=400, detail="Child start date cannot be after end date.")
+
+    if parent_id and s_date and e_date:
+        parent = db.query(WbsTask).filter(WbsTask.id == parent_id).first()
+        if parent:
+            p_start = to_date(parent.start_date)
+            p_end = to_date(parent.end_date)
+            if p_start and p_end:
+                if s_date < p_start or e_date > p_end:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Child date range must fall within the parent's planned date range."
+                    )
+
+    if node_id and s_date and e_date:
+        children = db.query(WbsTask).filter(WbsTask.parent_task_id == node_id).all()
+        for child in children:
+            c_start = to_date(child.start_date)
+            c_end = to_date(child.end_date)
+            if c_start and c_end:
+                if c_start < s_date or c_end > e_date:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Child date range must fall within the parent's planned date range."
+                    )
+
+
+def validate_boq_reference(db: Session, project_id: int, boq_item_id: Optional[int]):
+    """
+    BOQ Reference Project & Tenant Isolation Validation
+    """
+    if not boq_item_id:
+        return None
+    boq = db.query(BoqItem).filter(BoqItem.id == boq_item_id).first()
+    if not boq:
+        raise HTTPException(status_code=404, detail="Selected BOQ item does not exist.")
+    if boq.project_id != project_id:
+        raise HTTPException(status_code=400, detail="Selected BOQ item does not belong to this project.")
+    return boq
 
 @router.post("/tasks", response_model=WbsTaskResponse)
 def create_wbs_task(task_in: WbsTaskCreate, db: Session = Depends(get_db)):
@@ -292,25 +404,33 @@ def create_wbs_task(task_in: WbsTaskCreate, db: Session = Depends(get_db)):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    level = (task_in.task_level or "Task").strip()
+    if not task_in.title or not task_in.title.strip():
+        raise HTTPException(status_code=400, detail="WBS Node Name cannot be blank.")
 
-    # Validation Rules
-    if level.lower() == "task":
-        if not task_in.parent_task_id:
-            raise HTTPException(status_code=400, detail="Parent Phase is required for a Task.")
+    # Determine level/type
+    node_type = (task_in.node_type or task_in.task_level or "Task").strip()
+    norm_type = node_type.upper()
+
+    # Rule 1 — Circular Reference Check
+    if task_in.parent_task_id:
         parent = db.query(WbsTask).filter(WbsTask.id == task_in.parent_task_id, WbsTask.project_id == task_in.project_id).first()
         if not parent:
-            raise HTTPException(status_code=400, detail="Selected Parent Phase not found or does not belong to this project.")
-    elif level.lower() == "subtask":
-        if not task_in.parent_task_id:
-            raise HTTPException(status_code=400, detail="Parent Task is required for a Subtask.")
-        parent = db.query(WbsTask).filter(WbsTask.id == task_in.parent_task_id, WbsTask.project_id == task_in.project_id).first()
-        if not parent:
-            raise HTTPException(status_code=400, detail="Selected Parent Task not found or does not belong to this project.")
-    elif level.lower() == "phase":
-        task_in.parent_task_id = None
+            raise HTTPException(status_code=400, detail="Selected Parent Node not found or does not belong to this project.")
+        validate_no_circular_parent(db, None, task_in.parent_task_id)
 
-    task = WbsTask(**task_in.model_dump())
+    # Rule 2 — Date Range Check
+    validate_node_date_range(db, None, task_in.parent_task_id, task_in.start_date, task_in.end_date)
+
+    # BOQ Reference Isolation Check
+    if task_in.boq_item_id:
+        validate_boq_reference(db, task_in.project_id, task_in.boq_item_id)
+
+    task_data = task_in.model_dump()
+    task_data["task_level"] = norm_type
+    if "node_type" in task_data:
+        del task_data["node_type"]
+
+    task = WbsTask(**task_data)
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -326,13 +446,35 @@ def update_wbs_task(task_id: int, task_in: WbsTaskUpdate, db: Session = Depends(
     if not task:
         raise HTTPException(status_code=404, detail="WBS Task not found")
 
-    if task_in.start_date and task_in.end_date and task_in.start_date > task_in.end_date:
-        raise HTTPException(status_code=400, detail="Start Date cannot be after End Date.")
+    if task_in.title is not None and not task_in.title.strip():
+        raise HTTPException(status_code=400, detail="WBS Node Name cannot be blank.")
+
+    new_parent_id = task_in.parent_task_id if task_in.parent_task_id is not None else task.parent_task_id
+    new_start = task_in.start_date if task_in.start_date is not None else task.start_date
+    new_end = task_in.end_date if task_in.end_date is not None else task.end_date
+
+    # Rule 1 — Circular Reference Check
+    if task_in.parent_task_id is not None:
+        validate_no_circular_parent(db, task.id, task_in.parent_task_id)
+
+    # Rule 2 — Date Range Check
+    validate_node_date_range(db, task.id, new_parent_id, new_start, new_end)
+
+    # BOQ Reference Isolation Check
+    if task_in.boq_item_id is not None and task_in.boq_item_id > 0:
+        validate_boq_reference(db, task.project_id, task_in.boq_item_id)
 
     if task_in.wbs_code is not None and task_in.wbs_code.strip():
         task.wbs_code = task_in.wbs_code.strip()
     if task_in.title is not None and task_in.title.strip():
         task.title = task_in.title.strip()
+    if task_in.parent_task_id is not None:
+        task.parent_task_id = task_in.parent_task_id
+    if task_in.node_type or task_in.task_level:
+        n_type = (task_in.node_type or task_in.task_level).strip().upper()
+        task.task_level = n_type
+    if task_in.boq_item_id is not None:
+        task.boq_item_id = task_in.boq_item_id if task_in.boq_item_id > 0 else None
     if task_in.contractor_name is not None:
         task.contractor_name = task_in.contractor_name.strip()
     if task_in.start_date is not None:
@@ -398,29 +540,78 @@ def update_task_progress(task_id: int, progress_pct: float, actual_qty: float = 
 
     return {"message": "WBS Task progress updated", "task_id": task.id, "progress_pct": float(task.progress_pct), "status": task.status}
 
+@router.post("/project/{project_id}/publish")
+def publish_project_wbs(project_id: int, db: Session = Depends(get_db)):
+    """
+    Rule 3 — BOQ Required Before Publish:
+    Load all WBS nodes for project and verify every node has a BOQ reference.
+    If any node lacks BOQ reference, block publish and return HTTP 400 listing missing node(s).
+    """
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    nodes = db.query(WbsTask).filter(WbsTask.project_id == project_id).all()
+    if not nodes:
+        raise HTTPException(status_code=400, detail="Cannot publish Work Plan. No WBS nodes found for this project.")
+    
+    missing_boq_nodes = []
+    for node in nodes:
+        has_boq = False
+        if getattr(node, 'boq_item_id', None):
+            has_boq = True
+        else:
+            linked = db.query(BoqItem).filter(
+                (BoqItem.subtask_id == node.id) | (BoqItem.task_id == node.id) | (BoqItem.phase_id == node.id)
+            ).first()
+            if linked:
+                has_boq = True
+        
+        if not has_boq:
+            missing_boq_nodes.append(node.title)
+    
+    if missing_boq_nodes:
+        count = len(missing_boq_nodes)
+        names_str = ", ".join(missing_boq_nodes[:5])
+        if count > 5:
+            names_str += f" and {count - 5} more"
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot publish Work Plan. BOQ Reference is missing for {count} node{'s' if count > 1 else ''} ({names_str})."
+        )
+    
+    # Transactional Publish update
+    for node in nodes:
+        node.is_published = True
+    
+    db.commit()
+    return {
+        "message": f"Work Plan for project #{project_id} published successfully.",
+        "published_node_count": len(nodes)
+    }
+
 @router.delete("/tasks/{task_id}")
 def delete_wbs_task(task_id: int, db: Session = Depends(get_db)):
+    """
+    Rule 4 — Parent Delete Protection:
+    If a parent node has children, block deletion with exact message "Reassign or delete child nodes first."
+    """
     task = db.query(WbsTask).filter(WbsTask.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="WBS Task not found")
     
-    project_id = task.project_id
-
-    # Delete child subtasks / tasks recursively to prevent orphaned records
-    child_tasks = db.query(WbsTask).filter(WbsTask.parent_task_id == task_id).all()
-    for child in child_tasks:
-        grand_children = db.query(WbsTask).filter(WbsTask.parent_task_id == child.id).all()
-        for gc in grand_children:
-            db.delete(gc)
-        db.delete(child)
+    child_count = db.query(WbsTask).filter(WbsTask.parent_task_id == task_id).count()
+    if child_count > 0:
+        raise HTTPException(status_code=400, detail="Reassign or delete child nodes first.")
     
+    project_id = task.project_id
     db.delete(task)
     db.commit()
 
     # Recalculate remaining tree progress
     recalculate_project_wbs(db, project_id)
 
-    return {"message": f"WBS Task #{task_id} and its child items deleted successfully"}
+    return {"message": f"WBS Task #{task_id} deleted successfully"}
 
 @router.delete("/project/{project_id}")
 def delete_project_wbs_tasks(project_id: int, db: Session = Depends(get_db)):

@@ -167,6 +167,7 @@ export const wbsService = {
   updateProgress: (taskId, progressPct, actualQty = null, actualCost = null) => 
     api.put(`/wbs/tasks/${taskId}/progress`, null, { params: { progress_pct: progressPct, actual_qty: actualQty, actual_cost: actualCost } }),
   deleteTask: (taskId) => api.delete(`/wbs/tasks/${taskId}`),
+  publishWbs: (projectId) => api.post(`/wbs/project/${projectId}/publish`),
 };
 
 export const siteLogService = {
