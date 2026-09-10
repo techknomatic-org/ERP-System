@@ -14,8 +14,19 @@ api.interceptors.request.use((config) => {
   if (role) {
     config.headers['X-User-Role'] = role;
   }
+  const token = localStorage.getItem('erp_token');
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  const userId = localStorage.getItem('erp_user_id');
+  if (userId) {
+    config.headers['X-User-Id'] = userId;
+  }
+  config.headers['X-App-Version'] = localStorage.getItem('erp_client_version') || '2.0.0';
+  config.headers['X-App-Schema-Version'] = localStorage.getItem('erp_schema_version') || '2';
   return config;
 });
+
 
 export const authService = {
   getUsers: () => api.get('/auth/users'),
@@ -31,7 +42,19 @@ export const dashboardService = {
   getSummary: (params = {}) => api.get('/dashboard/summary', { params }),
   getStats: () => api.get('/dashboard/stats'),
   getRecentOrders: () => api.get('/dashboard/recent-orders'),
+  getUserProjects: () => api.get('/dashboard/user-projects'),
+  getUnifiedDashboard: (projectId, dateRange = 'full_contract') => 
+    api.get(`/dashboard/project/${projectId}/unified`, { params: { date_range: dateRange } }),
+  getActionQueue: (projectId) => 
+    api.get(`/dashboard/project/${projectId}/action-queue`),
+  getScheduleSnapshot: (projectId, dateRange = 'full_contract') => 
+    api.get(`/dashboard/project/${projectId}/schedule-snapshot`, { params: { date_range: dateRange } }),
+  getCostSnapshot: (projectId) => 
+    api.get(`/dashboard/project/${projectId}/cost-snapshot`),
+  getApprovalsPending: (projectId) => 
+    api.get(`/dashboard/project/${projectId}/approvals-pending`),
 };
+
 
 export const inventoryService = {
   getProducts: () => api.get('/inventory/products'),
@@ -217,6 +240,24 @@ export const boqMbService = {
   recordMb: (data) => api.post('/boq-mb/mb', data),
   createMaterialRequest: (data) => api.post('/boq-mb/material-request', data),
   createContractorBill: (data) => api.post('/boq-mb/contractor-bill', data),
+
+  // EXA-02 Digital e-MB Services
+  getEmbEntries: (projectId) => api.get(`/boq-mb/emb/project/${projectId}`),
+  getEmbEntry: (id) => api.get(`/boq-mb/emb/${id}`),
+  createEmbEntry: (data) => api.post('/boq-mb/emb', data),
+  updateEmbEntry: (id, data) => api.put(`/boq-mb/emb/${id}`, data),
+  signContractorRep: (id, data = {}) => api.post(`/boq-mb/emb/${id}/sign/contractor-rep`, data),
+  signJe: (id, data = {}) => api.post(`/boq-mb/emb/${id}/sign/je`, data),
+  createEmbCorrection: (id, data) => api.post(`/boq-mb/emb/${id}/correct`, data),
+  getStaleEmbEntries: (projectId = null) => api.get('/boq-mb/emb/stale', { params: projectId ? { project_id: projectId } : {} }),
+  syncEmbOffline: (data) => api.post('/boq-mb/emb/sync', data),
+
+  // EXA-03 Test-Check Sampling Services
+  getProjectTestChecks: (projectId) => api.get(`/boq-mb/test-checks/project/${projectId}`),
+  reviewTestCheck: (assignmentId, data) => api.post(`/boq-mb/test-checks/${assignmentId}/review`, data),
+  getSamplingConfig: () => api.get('/boq-mb/test-checks/config'),
+  updateSamplingConfig: (data) => api.put('/boq-mb/test-checks/config', data),
+  getTestCheckAudits: (assignmentId) => api.get(`/boq-mb/test-checks/${assignmentId}/audits`),
 };
 
 export const contractorBillingService = {
@@ -362,9 +403,14 @@ export const workPlanService = {
   deleteWorkPlan: (id) => api.delete(`/work-plans/${id}`),
   getBoqMappings: (wpId) => api.get(`/work-plans/${wpId}/boq-mappings`),
   getEligibleBoqItems: (wpId) => api.get(`/work-plans/${wpId}/eligible-boq-items`),
+  getProjectBoqMappings: (projectId) => api.get(`/work-plans/project/${projectId}/boq-mappings`),
+  getProjectEligibleBoqItems: (projectId) => api.get(`/work-plans/project/${projectId}/eligible-boq-items`),
   createBoqMapping: (wpId, data) => api.post(`/work-plans/${wpId}/boq-mappings`, data),
   updateBoqMapping: (mappingId, data) => api.put(`/work-plans/boq-mappings/${mappingId}`, data),
   deleteBoqMapping: (mappingId) => api.delete(`/work-plans/boq-mappings/${mappingId}`),
+  getPublishReadiness: (projectId) => api.get(`/work-plans/project/${projectId}/publish-readiness`),
+  publishWorkPlan: (projectId) => api.post(`/work-plans/project/${projectId}/publish`),
+  remapBoqMapping: (mappingId, data) => api.post(`/work-plans/boq-mappings/${mappingId}/remap`, data),
 };
 
 export const userService = {
@@ -382,12 +428,44 @@ export const taskAssignmentService = {
 
 export const projectTeamService = {
   getEligibleUsers: () => api.get('/project-teams/eligible-users'),
+  searchUsers: (query = '') => api.get('/project-teams/search-users', { params: { query } }),
+  inviteUser: (data) => api.post('/project-teams/invite', data),
   getProjectTeam: (projectId) => api.get(`/project-teams/project/${projectId}`),
   getTeamMemberDetail: (memberId) => api.get(`/project-teams/${memberId}`),
   createTeamMember: (data) => api.post('/project-teams', data),
   updateTeamMember: (memberId, data) => api.put(`/project-teams/${memberId}`, data),
   toggleMemberStatus: (memberId) => api.post(`/project-teams/${memberId}/toggle-status`),
   removeTeamMember: (memberId) => api.delete(`/project-teams/${memberId}`),
+  getPendingApprovals: (memberId) => api.get(`/project-teams/members/${memberId}/pending-approvals`),
+  reassignApprovals: (data) => api.post('/project-teams/reassign-approvals', data),
+};
+
+export const milestoneService = {
+  getMilestones: (projectId) => api.get('/milestones', { params: { project_id: projectId } }),
+  getMilestonesByProject: (projectId) => api.get(`/milestones/project/${projectId}`),
+  getMilestoneById: (id) => api.get(`/milestones/${id}`),
+  getWbsNodeBoqSummary: (nodeId) => api.get(`/milestones/wbs-node/${nodeId}/boq-summary`),
+  createMilestone: (data) => api.post('/milestones', data),
+  updateMilestone: (id, data) => api.put(`/milestones/${id}`, data),
+  deleteMilestone: (id) => api.delete(`/milestones/${id}`),
+};
+
+export const hindranceService = {
+  getHindrances: (params = {}) => api.get('/hindrances', { params }),
+  getPendingEe: (projectId = null) => api.get('/hindrances/pending-ee', { params: { project_id: projectId } }),
+  getHindranceById: (id) => api.get(`/hindrances/${id}`),
+  createHindrance: (data) => api.post('/hindrances', data),
+  submitEeDecision: (id, data) => api.post(`/hindrances/${id}/ee-decision`, data),
+  resubmitHindrance: (id, data) => api.post(`/hindrances/${id}/resubmit`, data),
+  processSla: () => api.post('/hindrances/process-sla'),
+  getEotBreakdown: (projectId) => api.get(`/hindrances/project/${projectId}/eot-breakdown`),
+};
+
+export const mobileService = {
+  checkVersion: (clientVersion = '2.0.0', schemaVersion = 2) =>
+    api.get('/mobile/version-check', { params: { client_version: clientVersion, schema_version: schemaVersion } }),
+  getBootstrapData: () => api.get('/mobile/bootstrap'),
+  sync: (payload) => api.post('/mobile/sync', payload)
 };
 
 export const systemService = {
@@ -395,3 +473,5 @@ export const systemService = {
 };
 
 export default api;
+
+

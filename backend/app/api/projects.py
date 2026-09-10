@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, date
 
 from app.database import get_db
-from app.models import Project, Division, TenantSetting, ContractorBill, BoqItem, AuditLog
+from app.models import Project, Division, TenantSetting, ContractorBill, BoqItem, AuditLog, ProjectTeamMember
 from app.schemas import (
     ProjectCreate, ProjectResponse,
     DivisionCreate, DivisionResponse,
@@ -236,15 +236,47 @@ def update_project(project_id: int, project_in: ProjectCreate, db: Session = Dep
     if project_in.end_date <= project_in.start_date:
         raise HTTPException(status_code=400, detail="Scheduled Completion Date must be after Start Date.")
 
-    # 5. Project Activation Gate Enforcement (DRAFT -> ACTIVE transition)
+    # 5. Project Activation Gate Enforcement (DRAFT -> ACTIVE transition or leaving DRAFT)
     target_status = project_in.status or project.status
-    if target_status.upper() == "ACTIVE" and project.status.upper() == "DRAFT":
+    if project.status.upper() == "DRAFT" and target_status.upper() != "DRAFT":
+        today = date.today()
+        # 5a. Check active Contractor PM
+        pm = db.query(ProjectTeamMember).filter(
+            ProjectTeamMember.project_id == project_id,
+            ProjectTeamMember.is_active == True,
+            ProjectTeamMember.status == "ACTIVE",
+            func.lower(ProjectTeamMember.project_role) == "contractor pm",
+            ProjectTeamMember.effective_from <= today,
+            or_(ProjectTeamMember.effective_to.is_(None), ProjectTeamMember.effective_to >= today)
+        ).first()
+        if not pm:
+            raise HTTPException(
+                status_code=400,
+                detail="Project cannot leave Draft: assign at least one Contractor PM."
+            )
+
+        # 5b. Check active EE
+        ee = db.query(ProjectTeamMember).filter(
+            ProjectTeamMember.project_id == project_id,
+            ProjectTeamMember.is_active == True,
+            ProjectTeamMember.status == "ACTIVE",
+            func.lower(ProjectTeamMember.project_role) == "ee",
+            ProjectTeamMember.effective_from <= today,
+            or_(ProjectTeamMember.effective_to.is_(None), ProjectTeamMember.effective_to >= today)
+        ).first()
+        if not ee:
+            raise HTTPException(
+                status_code=400,
+                detail="Project cannot leave Draft: assign at least one EE."
+            )
+
+        # 5c. BOQ, Detailed Estimate, and Approved Technical Sanction
         has_boq = db.query(BoqItem).filter(BoqItem.project_id == project_id).first() is not None
         
         has_estimate = False
         try:
-            from app.models import DetailedEstimate
-            has_estimate = db.query(DetailedEstimate).filter(DetailedEstimate.project_id == project_id).first() is not None
+            from app.models import ProjectEstimate
+            has_estimate = db.query(ProjectEstimate).filter(ProjectEstimate.project_id == project_id).first() is not None
         except Exception:
             has_estimate = False
 

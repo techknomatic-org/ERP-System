@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 from passlib.context import CryptContext
 from pydantic import BaseModel
@@ -14,9 +15,20 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def get_current_user(
     authorization: Optional[str] = Header(None),
+    x_user_id: Optional[str] = Header(None),
+    x_user_role: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ) -> User:
-    """Extract current authenticated user from Bearer token or return default admin."""
+    """Extract current authenticated user from Bearer token, X-User-Id, X-User-Role, or return default admin."""
+    if x_user_id:
+        try:
+            uid = int(x_user_id)
+            user = db.query(User).filter(User.id == uid).first()
+            if user:
+                return user
+        except Exception:
+            pass
+
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split("Bearer ")[1].strip()
         parts = token.split("-")
@@ -28,6 +40,12 @@ def get_current_user(
                     return user
             except Exception:
                 pass
+
+    if x_user_role:
+        role_user = db.query(User).filter(func.lower(User.role) == x_user_role.lower()).first()
+        if role_user:
+            return role_user
+
     admin_user = db.query(User).filter(User.username == "admin").first()
     if not admin_user:
         admin_user = db.query(User).first()

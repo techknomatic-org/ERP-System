@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Calendar, Layers, CheckCircle, Clock, AlertCircle, XCircle, 
   Plus, Search, Filter, RefreshCw, Eye, Edit, Trash2, ArrowUpRight, 
   Building2, Hash, FileText, Check, AlertTriangle, User, Tag, FileSpreadsheet,
-  Link, DollarSign
+  Link, DollarSign, Target
 } from 'lucide-react';
 import { workPlanService, projectService, wbsService } from '../services/api';
 
 export default function WorkPlan() {
+  const navigate = useNavigate();
   const [workPlans, setWorkPlans] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,6 +27,7 @@ export default function WorkPlan() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedWP, setSelectedWP] = useState(null);
   const [editingWPId, setEditingWPId] = useState(null);
+  const [editModalTab, setEditModalTab] = useState('details'); // 'details' | 'boq'
 
   // FEATURE 2: BOQ Mapping State
   const [boqMappings, setBoqMappings] = useState([]);
@@ -33,11 +36,21 @@ export default function WorkPlan() {
   const [editingMappingId, setEditingMappingId] = useState(null);
   const [boqFormData, setBoqFormData] = useState({
     boq_item_id: '',
+    wbs_node_id: '',
     mapped_quantity: '',
     unit: ''
   });
   const [selectedBoqItemData, setSelectedBoqItemData] = useState(null);
   const [boqFormErrors, setBoqFormErrors] = useState({});
+
+  // WPT-02: Publish & Remap State
+  const [publishReadiness, setPublishReadiness] = useState(null);
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [isRemapModalOpen, setIsRemapModalOpen] = useState(false);
+  const [targetOrphanedMapping, setTargetOrphanedMapping] = useState(null);
+  const [selectedRemapBoqId, setSelectedRemapBoqId] = useState('');
+  const [remapLoading, setRemapLoading] = useState(false);
+  const [publishLoading, setPublishLoading] = useState(false);
 
   // WBS Cascading options
   const [projectWbsTasks, setProjectWbsTasks] = useState([]);
@@ -90,7 +103,80 @@ export default function WorkPlan() {
 
   useEffect(() => {
     fetchData();
+    if (selectedProjectId) {
+      fetchPublishReadiness(selectedProjectId);
+    } else {
+      setPublishReadiness(null);
+    }
   }, [selectedProjectId]);
+
+  const fetchPublishReadiness = async (projId) => {
+    if (!projId) {
+      setPublishReadiness(null);
+      return;
+    }
+    try {
+      const res = await workPlanService.getPublishReadiness(projId);
+      setPublishReadiness(res.data);
+    } catch (e) {
+      console.error("Failed to load publish readiness:", e);
+    }
+  };
+
+  const handlePublishWorkPlan = async () => {
+    if (!selectedProjectId) {
+      alert("Please select a project to publish its Work Plan.");
+      return;
+    }
+    setPublishLoading(true);
+    setError(null);
+    try {
+      const res = await workPlanService.publishWorkPlan(selectedProjectId);
+      setSuccessMsg(res.data.message || "Work Plan published successfully!");
+      setIsPublishModalOpen(false);
+      fetchData();
+      fetchPublishReadiness(selectedProjectId);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err) {
+      const detail = err.response?.data?.detail || "Failed to publish Work Plan.";
+      setError(detail);
+      await fetchPublishReadiness(selectedProjectId);
+      setIsPublishModalOpen(true);
+    } finally {
+      setPublishLoading(false);
+    }
+  };
+
+  const handleOpenRemapModal = (orphanedMapping) => {
+    setTargetOrphanedMapping(orphanedMapping);
+    setSelectedRemapBoqId('');
+    setIsRemapModalOpen(true);
+  };
+
+  const handleExecuteRemap = async (e) => {
+    e.preventDefault();
+    if (!selectedRemapBoqId || !targetOrphanedMapping) return;
+    setRemapLoading(true);
+    try {
+      await workPlanService.remapBoqMapping(targetOrphanedMapping.mapping_id || targetOrphanedMapping.id, {
+        target_boq_item_id: parseInt(selectedRemapBoqId, 10)
+      });
+      setSuccessMsg("Orphaned mapping remapped successfully!");
+      setIsRemapModalOpen(false);
+      fetchData();
+      if (selectedWP) {
+        fetchBoqMappingsData(selectedWP.id);
+      }
+      if (selectedProjectId) {
+        fetchPublishReadiness(selectedProjectId);
+      }
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err) {
+      setError(err.response?.data?.detail || "Failed to remap BOQ item.");
+    } finally {
+      setRemapLoading(false);
+    }
+  };
 
   // Calculate Summary KPI Cards
   const summaryMetrics = useMemo(() => {
@@ -284,6 +370,8 @@ export default function WorkPlan() {
   // Open Modal for Edit Work Plan
   const handleOpenEditModal = async (wp) => {
     setEditingWPId(wp.id);
+    setSelectedWP(wp);
+    setEditModalTab('details');
     setFormErrors({});
     setDateWarning(null);
 
@@ -304,7 +392,10 @@ export default function WorkPlan() {
       remarks: wp.remarks || ''
     });
 
-    await handleLoadWbsForProject(wp.project_id.toString());
+    await Promise.all([
+      handleLoadWbsForProject(wp.project_id.toString()),
+      fetchBoqMappingsData(wp.id)
+    ]);
     setIsModalOpen(true);
   };
 
@@ -425,29 +516,64 @@ export default function WorkPlan() {
     return false;
   }, [boqFormData, selectedBoqItemData, editingMappingId, boqMappings]);
 
+  // Live over-mapped detection for dynamic warning display
+  const isOverMapped = useMemo(() => {
+    if (!selectedBoqItemData) return false;
+    const qty = parseFloat(boqFormData.mapped_quantity);
+    if (boqFormData.mapped_quantity === '' || isNaN(qty) || qty <= 0) return false;
+    const maxAllowed = editingMappingId 
+      ? (selectedBoqItemData.remaining_unmapped_qty + (boqMappings.find(m => m.id === editingMappingId)?.mapped_quantity || 0))
+      : selectedBoqItemData.remaining_unmapped_qty;
+    return qty > maxAllowed + 1e-6;
+  }, [boqFormData.mapped_quantity, selectedBoqItemData, editingMappingId, boqMappings]);
+
   // FEATURE 2: OPEN MAP BOQ ITEM MODAL
-  const handleOpenMapBoqModal = (mappingToEdit = null) => {
+  const handleOpenMapBoqModal = async (mappingToEdit = null, wpTarget = null, preselectBoqId = null) => {
     setBoqFormErrors({});
-    if (mappingToEdit) {
-      setEditingMappingId(mappingToEdit.id);
-      const boqItem = eligibleBoqItems.find(b => b.boq_item_id === mappingToEdit.boq_item_id);
-      setSelectedBoqItemData(boqItem || null);
-      setBoqFormData({
-        boq_item_id: mappingToEdit.boq_item_id.toString(),
-        mapped_quantity: mappingToEdit.mapped_quantity.toString(),
-        unit: mappingToEdit.unit
-      });
-    } else {
-      setEditingMappingId(null);
-      // Prefer compatible BOQ items first on initial modal opening
-      const comp = eligibleBoqItems.filter(b => b.is_unit_compatible);
-      const firstEligible = comp.length > 0 ? comp[0] : (eligibleBoqItems.length > 0 ? eligibleBoqItems[0] : null);
-      setSelectedBoqItemData(firstEligible);
-      setBoqFormData({
-        boq_item_id: firstEligible ? firstEligible.boq_item_id.toString() : '',
-        mapped_quantity: firstEligible ? Math.min(selectedWP.planned_quantity, firstEligible.remaining_unmapped_qty).toString() : '',
-        unit: firstEligible ? firstEligible.unit : selectedWP.unit
-      });
+    const activeWP = wpTarget || selectedWP;
+    if (activeWP) {
+      setSelectedWP(activeWP);
+      try {
+        const [mappingsRes, eligibleRes] = await Promise.all([
+          workPlanService.getBoqMappings(activeWP.id),
+          workPlanService.getEligibleBoqItems(activeWP.id)
+        ]);
+        const mList = mappingsRes.data || [];
+        const eList = eligibleRes.data || [];
+        setBoqMappings(mList);
+        setEligibleBoqItems(eList);
+
+        if (mappingToEdit) {
+          setEditingMappingId(mappingToEdit.id);
+          const boqItem = eList.find(b => b.boq_item_id === mappingToEdit.boq_item_id);
+          setSelectedBoqItemData(boqItem || null);
+          setBoqFormData({
+            boq_item_id: mappingToEdit.boq_item_id.toString(),
+            wbs_node_id: activeWP.id.toString(),
+            mapped_quantity: mappingToEdit.mapped_quantity.toString(),
+            unit: mappingToEdit.unit
+          });
+        } else {
+          setEditingMappingId(null);
+          let targetBoq = null;
+          if (preselectBoqId) {
+            targetBoq = eList.find(b => b.boq_item_id === preselectBoqId);
+          }
+          if (!targetBoq) {
+            const comp = eList.filter(b => b.is_unit_compatible);
+            targetBoq = comp.length > 0 ? comp[0] : (eList.length > 0 ? eList[0] : null);
+          }
+          setSelectedBoqItemData(targetBoq || null);
+          setBoqFormData({
+            boq_item_id: targetBoq ? targetBoq.boq_item_id.toString() : '',
+            wbs_node_id: activeWP.id.toString(),
+            mapped_quantity: '',
+            unit: targetBoq ? targetBoq.unit : activeWP.unit
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load BOQ items:", err);
+      }
     }
     setIsMapBoqModalOpen(true);
   };
@@ -468,7 +594,6 @@ export default function WorkPlan() {
       setSelectedBoqItemData(boq);
       setBoqFormData(prev => ({
         ...prev,
-        mapped_quantity: Math.min(selectedWP.planned_quantity, boq.remaining_unmapped_qty).toString(),
         unit: boq.unit
       }));
     }
@@ -490,7 +615,7 @@ export default function WorkPlan() {
         : selectedBoqItemData.remaining_unmapped_qty;
 
       if (qty > maxAllowed + 1e-6) {
-        errs.mapped_quantity = `Mapped quantity (${qty.toLocaleString()} ${boqFormData.unit}) exceeds remaining BOQ quantity (${maxAllowed.toLocaleString()} ${boqFormData.unit}).`;
+        errs.mapped_quantity = `Mapped quantity exceeds remaining unmapped quantity. Remaining balance: ${maxAllowed} ${boqFormData.unit || selectedBoqItemData.unit}.`;
       }
     }
 
@@ -504,30 +629,37 @@ export default function WorkPlan() {
 
   // Submit BOQ Mapping
   const handleSaveBoqMapping = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!validateBoqMappingForm()) return;
 
     try {
+      const targetWpId = boqFormData.wbs_node_id ? parseInt(boqFormData.wbs_node_id, 10) : selectedWP.id;
       if (editingMappingId) {
         await workPlanService.updateBoqMapping(editingMappingId, {
           mapped_quantity: parseFloat(boqFormData.mapped_quantity)
         });
-        setSuccessMsg("BOQ item mapping updated.");
+        setSuccessMsg("BOQ item mapping updated successfully.");
       } else {
-        await workPlanService.createBoqMapping(selectedWP.id, {
+        await workPlanService.createBoqMapping(targetWpId, {
           boq_item_id: parseInt(boqFormData.boq_item_id, 10),
+          work_plan_id: targetWpId,
           mapped_quantity: parseFloat(boqFormData.mapped_quantity),
-          unit: boqFormData.unit
+          unit: boqFormData.unit || selectedBoqItemData?.unit
         });
         setSuccessMsg("BOQ item mapped successfully.");
       }
-      setIsMapBoqModalOpen(false);
-      await fetchBoqMappingsData(selectedWP.id);
+      setEditingMappingId(null);
+      setBoqFormData(prev => ({ ...prev, mapped_quantity: '' }));
+      if (selectedWP) {
+        await fetchBoqMappingsData(selectedWP.id);
+      }
       fetchData();
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err) {
       console.error("Save BOQ mapping error:", err);
-      setError(err.response?.data?.detail || "Failed to save BOQ mapping.");
+      const msg = err.response?.data?.detail || "Failed to save BOQ mapping.";
+      setBoqFormErrors(prev => ({ ...prev, general: msg }));
+      setError(msg);
     }
   };
 
@@ -539,7 +671,9 @@ export default function WorkPlan() {
     try {
       await workPlanService.deleteBoqMapping(mappingId);
       setSuccessMsg(`BOQ Item mapping removed.`);
-      await fetchBoqMappingsData(selectedWP.id);
+      if (selectedWP) {
+        await fetchBoqMappingsData(selectedWP.id);
+      }
       fetchData();
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err) {
@@ -598,16 +732,385 @@ export default function WorkPlan() {
     }
   };
 
-  // FEATURE 2: Render BOQ Mapping status badge in Work Plan table
+  // FEATURE 2: Render BOQ Mapping status badge / action button in Work Plan table
   const renderBoqMappingBadge = (wp) => {
     const st = wp.boq_mapping_status || 'Not Mapped';
     if (st === 'Not Mapped') {
-      return <span style={{ color: '#94a3b8', background: 'rgba(148,163,184,0.12)', border: '1px solid rgba(148,163,184,0.25)', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.73rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><Clock size={11} /> Not Mapped</span>;
+      return (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenMapBoqModal(null, wp);
+          }}
+          style={{
+            color: '#38bdf8',
+            background: 'rgba(56, 189, 248, 0.12)',
+            border: '1px solid rgba(56, 189, 248, 0.4)',
+            padding: '0.25rem 0.65rem',
+            borderRadius: '4px',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+          title="Click to map BOQ items to this activity"
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(56, 189, 248, 0.25)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(56, 189, 248, 0.12)'; }}
+        >
+          <Plus size={12} /> Map BOQ
+        </button>
+      );
     } else if (st === 'Fully Mapped') {
-      return <span style={{ color: '#34d399', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.73rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><CheckCircle size={11} /> Fully Mapped</span>;
+      return (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenMapBoqModal(null, wp);
+          }}
+          style={{
+            color: '#34d399',
+            background: 'rgba(16, 185, 129, 0.15)',
+            border: '1px solid rgba(16, 185, 129, 0.4)',
+            padding: '0.25rem 0.65rem',
+            borderRadius: '4px',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+            cursor: 'pointer'
+          }}
+          title="Fully Mapped — Click to view/edit mappings"
+        >
+          <CheckCircle size={12} /> Fully Mapped
+        </button>
+      );
     } else {
-      return <span style={{ color: '#38bdf8', background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.73rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><Layers size={11} /> {st}</span>;
+      return (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenMapBoqModal(null, wp);
+          }}
+          style={{
+            color: '#38bdf8',
+            background: 'rgba(56, 189, 248, 0.15)',
+            border: '1px solid rgba(56, 189, 248, 0.4)',
+            padding: '0.25rem 0.65rem',
+            borderRadius: '4px',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+            cursor: 'pointer'
+          }}
+          title="Click to view/edit mappings"
+        >
+          <Layers size={12} /> {st}
+        </button>
+      );
     }
+  };
+
+  // Renders the functional BOQ Mapping UI (used both inside Edit modal and standalone Map BOQ modal)
+  const renderBoqMappingSection = () => {
+    if (!selectedWP) {
+      return (
+        <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+          Please select a Work Plan Activity first.
+        </div>
+      );
+    }
+
+    const totalMapped = boqMappings.reduce((sum, m) => sum + (parseFloat(m.mapped_quantity) || 0), 0);
+
+    return (
+      <div style={{ padding: '1rem 1.25rem' }}>
+        {/* Activity & Mapping Metrics Summary */}
+        <div style={{ background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '8px', padding: '0.85rem 1.1rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div>
+            <div style={{ color: '#94a3b8', fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 700 }}>Activity Planned Quantity</div>
+            <div style={{ color: '#f8fafc', fontSize: '1.25rem', fontWeight: 700 }}>
+              {selectedWP.planned_quantity?.toLocaleString()} {selectedWP.unit}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.1rem' }}>
+              {selectedWP.work_plan_number} — {selectedWP.activity_name}
+            </div>
+          </div>
+          <div>
+            <div style={{ color: '#94a3b8', fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 700 }}>Total BOQ Mapped</div>
+            <div style={{ color: '#34d399', fontSize: '1.25rem', fontWeight: 700 }}>
+              {totalMapped.toLocaleString()} {selectedWP.unit}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.1rem' }}>
+              {boqMappings.length} item(s) mapped
+            </div>
+          </div>
+          <div>
+            <div style={{ color: '#94a3b8', fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 700 }}>Remaining to Map</div>
+            <div style={{ color: Math.max(0, (selectedWP.planned_quantity || 0) - totalMapped) > 0 ? '#fbbf24' : '#34d399', fontSize: '1.25rem', fontWeight: 700 }}>
+              {Math.max(0, (selectedWP.planned_quantity || 0) - totalMapped).toLocaleString()} {selectedWP.unit}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.1rem' }}>
+              Activity balance
+            </div>
+          </div>
+        </div>
+
+        {/* Existing Mappings Table */}
+        <div style={{ marginBottom: '1.5rem', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', overflow: 'hidden' }}>
+          <div style={{ padding: '0.75rem 1rem', background: 'rgba(30, 41, 59, 0.6)', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 700, fontSize: '0.82rem', color: '#f8fafc', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Layers size={15} style={{ color: '#38bdf8' }} /> Current BOQ Mappings
+            </span>
+            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+              {boqMappings.length} record(s)
+            </span>
+          </div>
+
+          {boqMappings.length === 0 ? (
+            <div style={{ padding: '1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
+              No BOQ items mapped to this activity yet. Use the form below to add a mapping.
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ background: 'rgba(15, 23, 42, 0.9)', color: '#94a3b8', textTransform: 'uppercase', fontSize: '0.68rem', letterSpacing: '0.04em', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <th style={{ padding: '0.65rem 0.85rem' }}>BOQ Item</th>
+                    <th style={{ padding: '0.65rem 0.85rem', textAlign: 'right' }}>BOQ Qty</th>
+                    <th style={{ padding: '0.65rem 0.85rem', textAlign: 'right' }}>Mapped Qty</th>
+                    <th style={{ padding: '0.65rem 0.85rem', textAlign: 'right' }}>Remaining Qty</th>
+                    <th style={{ padding: '0.65rem 0.85rem' }}>WBS Node</th>
+                    <th style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {boqMappings.map(m => (
+                    <tr key={m.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <td style={{ padding: '0.65rem 0.85rem' }}>
+                        <div style={{ fontWeight: 600, color: '#f8fafc' }}>{m.boq_description}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#38bdf8' }}>{m.boq_code}</div>
+                      </td>
+                      <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right', color: '#cbd5e1' }}>
+                        {m.boq_total_quantity.toLocaleString()} {m.unit}
+                      </td>
+                      <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right', fontWeight: 700, color: '#34d399' }}>
+                        {m.mapped_quantity.toLocaleString()} {m.unit}
+                      </td>
+                      <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right', color: '#fbbf24', fontWeight: 600 }}>
+                        {m.remaining_quantity.toLocaleString()} {m.unit}
+                      </td>
+                      <td style={{ padding: '0.65rem 0.85rem', color: '#e2e8f0' }}>
+                        {m.wbs_node_name || selectedWP.activity_name}
+                      </td>
+                      <td style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.35rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenMapBoqModal(m)}
+                            className="btn btn-sm"
+                            style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', color: '#fbbf24', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.72rem', cursor: 'pointer' }}
+                          >
+                            <Edit size={12} /> Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveBoqMapping(m.id, m.boq_code)}
+                            className="btn btn-sm"
+                            style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.72rem', cursor: 'pointer' }}
+                          >
+                            <Trash2 size={12} /> Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Functional Add/Edit Mapping Form */}
+        <div style={{ background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '8px', padding: '1.25rem' }}>
+          <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#38bdf8', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Plus size={16} /> {editingMappingId ? 'Edit BOQ Mapping' : '+ Add BOQ Mapping'}
+          </h4>
+
+          {boqFormErrors.general && (
+            <div style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', color: '#fca5a5', padding: '0.65rem 0.85rem', borderRadius: '6px', marginBottom: '1rem', fontSize: '0.82rem' }}>
+              {boqFormErrors.general}
+            </div>
+          )}
+
+          <form onSubmit={handleSaveBoqMapping}>
+            {/* 1. BOQ Item Lookup */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                BOQ Item *
+              </label>
+              {eligibleBoqItems.length === 0 ? (
+                <div style={{ color: '#fbbf24', fontSize: '0.8rem', padding: '0.65rem', background: 'rgba(245,158,11,0.1)', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.2)' }}>
+                  No BOQ items found for project '{selectedWP.project_name}'. Create or approve items in Detailed Estimate first.
+                </div>
+              ) : (
+                <select
+                  value={boqFormData.boq_item_id}
+                  onChange={handleBoqItemSelectChange}
+                  disabled={!!editingMappingId}
+                  style={{
+                    width: '100%',
+                    background: '#1e293b',
+                    border: boqFormErrors.boq_item_id ? '1px solid #ef4444' : '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '6px',
+                    padding: '0.55rem 0.75rem',
+                    color: '#f8fafc',
+                    fontSize: '0.85rem'
+                  }}
+                >
+                  <option value="">[ Select BOQ Item from current Detailed Estimate ]</option>
+                  {eligibleBoqItems.map(b => (
+                    <option key={b.boq_item_id} value={b.boq_item_id}>
+                      {b.boq_code} — {b.item_name} ({b.approved_qty.toLocaleString()} {b.unit}) — Remaining: {b.remaining_unmapped_qty.toLocaleString()} {b.unit}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {boqFormErrors.boq_item_id && <div style={{ color: '#f87171', fontSize: '0.75rem', marginTop: '0.3rem' }}>{boqFormErrors.boq_item_id}</div>}
+            </div>
+
+            {/* Dynamic Display Cards: BOQ Quantity, Already Mapped, Remaining */}
+            {selectedBoqItemData && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginBottom: '1.1rem' }}>
+                <div style={{ background: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', padding: '0.75rem 0.9rem' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>BOQ Quantity</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#cbd5e1', marginTop: '0.15rem' }}>
+                    {selectedBoqItemData.approved_qty.toLocaleString()} {selectedBoqItemData.unit}
+                  </div>
+                </div>
+                <div style={{ background: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', padding: '0.75rem 0.9rem' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Already Mapped</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#38bdf8', marginTop: '0.15rem' }}>
+                    {selectedBoqItemData.total_allocated_qty.toLocaleString()} {selectedBoqItemData.unit}
+                  </div>
+                </div>
+                <div style={{ background: 'rgba(15, 23, 42, 0.7)', border: selectedBoqItemData.remaining_unmapped_qty > 0 ? '1px solid rgba(52, 211, 153, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', padding: '0.75rem 0.9rem' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Remaining</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: selectedBoqItemData.remaining_unmapped_qty > 0 ? '#34d399' : '#f87171', marginTop: '0.15rem' }}>
+                    {selectedBoqItemData.remaining_unmapped_qty.toLocaleString()} {selectedBoqItemData.unit}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2. WBS Node Dropdown */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                WBS Node *
+              </label>
+              <select
+                value={boqFormData.wbs_node_id || selectedWP.id.toString()}
+                onChange={(e) => setBoqFormData(prev => ({ ...prev, wbs_node_id: e.target.value }))}
+                style={{
+                  width: '100%',
+                  background: '#1e293b',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '6px',
+                  padding: '0.55rem 0.75rem',
+                  color: '#f8fafc',
+                  fontSize: '0.85rem'
+                }}
+              >
+                {workPlans.filter(w => w.project_id === selectedWP.project_id).map(w => (
+                  <option key={w.id} value={w.id}>
+                    {w.task_name ? `${w.task_name} ` : ''}({w.work_plan_number} — {w.activity_name})
+                  </option>
+                ))}
+              </select>
+              <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.25rem' }}>
+                Only WBS nodes / activities belonging to {selectedWP.project_name} may be selected.
+              </div>
+            </div>
+
+            {/* 3. Mapped Quantity Field */}
+            <div style={{ marginBottom: '1.1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '0.35rem' }}>
+                Mapped Quantity ({selectedBoqItemData ? selectedBoqItemData.unit : selectedWP.unit}) *
+              </label>
+              <input
+                type="number"
+                step="any"
+                placeholder={`Enter mapped quantity in ${selectedBoqItemData ? selectedBoqItemData.unit : selectedWP.unit}...`}
+                value={boqFormData.mapped_quantity}
+                onChange={(e) => setBoqFormData(prev => ({ ...prev, mapped_quantity: e.target.value }))}
+                style={{
+                  width: '100%',
+                  background: '#1e293b',
+                  border: (boqFormErrors.mapped_quantity || isOverMapped) ? '1px solid #ef4444' : '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '6px',
+                  padding: '0.55rem 0.75rem',
+                  color: '#f8fafc',
+                  fontSize: '0.85rem'
+                }}
+              />
+              {boqFormErrors.mapped_quantity && <div style={{ color: '#f87171', fontSize: '0.75rem', marginTop: '0.3rem' }}>{boqFormErrors.mapped_quantity}</div>}
+            </div>
+
+            {/* Live Over-Mapping Warning Alert */}
+            {isOverMapped && selectedBoqItemData && (
+              <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef4444', color: '#fca5a5', padding: '0.75rem 1rem', borderRadius: '6px', marginBottom: '1.1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <AlertCircle size={18} style={{ color: '#ef4444', flexShrink: 0 }} />
+                <div>
+                  <strong>BLOCK SAVE:</strong> Mapped quantity exceeds remaining unmapped quantity. Remaining balance: {selectedBoqItemData.remaining_unmapped_qty} {selectedBoqItemData.unit}.
+                </div>
+              </div>
+            )}
+
+            {/* Form Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              {editingMappingId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingMappingId(null);
+                    setBoqFormData(prev => ({ ...prev, mapped_quantity: '' }));
+                  }}
+                  className="btn btn-secondary"
+                  style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', padding: '0.45rem 1rem', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  Cancel Edit
+                </button>
+              )}
+              <button
+                type="submit"
+                disabled={isSaveBoqDisabled || isOverMapped}
+                className="btn btn-primary"
+                style={{
+                  background: (isSaveBoqDisabled || isOverMapped) ? '#334155' : 'linear-gradient(135deg, #0284c7, #0369a1)',
+                  border: 'none',
+                  color: (isSaveBoqDisabled || isOverMapped) ? '#94a3b8' : '#ffffff',
+                  fontWeight: 600,
+                  padding: '0.55rem 1.4rem',
+                  borderRadius: '6px',
+                  cursor: (isSaveBoqDisabled || isOverMapped) ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Save Mapping
+              </button>
+            </div>
+
+          </form>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -625,7 +1128,41 @@ export default function WorkPlan() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          {selectedProjectId && (
+            <button
+              onClick={handlePublishWorkPlan}
+              disabled={publishLoading}
+              className="btn"
+              style={{
+                background: publishReadiness?.can_publish
+                  ? 'linear-gradient(135deg, #10b981, #059669)'
+                  : 'rgba(239, 68, 68, 0.15)',
+                border: publishReadiness?.can_publish
+                  ? 'none'
+                  : '1px solid rgba(239, 68, 68, 0.4)',
+                color: publishReadiness?.can_publish ? '#ffffff' : '#fca5a5',
+                fontWeight: 600,
+                padding: '0.6rem 1.15rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                cursor: 'pointer',
+                borderRadius: '6px',
+                boxShadow: publishReadiness?.can_publish ? '0 4px 12px rgba(16,185,129,0.3)' : 'none'
+              }}
+            >
+              <CheckCircle size={17} />
+              {publishLoading ? "Publishing..." : "Publish Work Plan"}
+            </button>
+          )}
+          <button
+            onClick={() => navigate(selectedProjectId ? `/milestones?projectId=${selectedProjectId}` : '/milestones')}
+            className="btn btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.3)', color: '#38bdf8', fontWeight: 600, padding: '0.6rem 1rem', borderRadius: '6px', cursor: 'pointer' }}
+          >
+            <Target size={16} /> Milestones (WPT-03)
+          </button>
           <button
             onClick={fetchData}
             className="btn btn-secondary"
@@ -642,6 +1179,61 @@ export default function WorkPlan() {
           </button>
         </div>
       </div>
+
+      {/* Publish Readiness Summary Banner */}
+      {selectedProjectId && publishReadiness && (
+        <div style={{
+          background: publishReadiness.can_publish ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+          border: publishReadiness.can_publish ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
+          borderRadius: '8px',
+          padding: '0.85rem 1.25rem',
+          marginBottom: '1.25rem',
+          display: 'flex',
+          justify: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '0.75rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {publishReadiness.can_publish ? (
+              <CheckCircle size={22} style={{ color: '#34d399', flexShrink: 0 }} />
+            ) : (
+              <AlertTriangle size={22} style={{ color: '#fbbf24', flexShrink: 0 }} />
+            )}
+            <div>
+              <div style={{ fontWeight: 600, color: publishReadiness.can_publish ? '#34d399' : '#fbbf24', fontSize: '0.92rem' }}>
+                {publishReadiness.can_publish 
+                  ? "Work Plan 100% BOQ Mapped & Ready for Publish" 
+                  : `Publish Blocked: ${publishReadiness.unmapped_count + publishReadiness.partially_mapped_count} BOQ item(s) unmapped / partially mapped${publishReadiness.orphaned_count > 0 ? `, ${publishReadiness.orphaned_count} orphaned mapping(s)` : ''}`
+                }
+              </div>
+              <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '0.15rem' }}>
+                Total BOQ items: <strong>{publishReadiness.total_boq_items}</strong> | Fully Mapped: <strong style={{ color: '#34d399' }}>{publishReadiness.fully_mapped_count}</strong> | Unmapped/Partial: <strong style={{ color: '#fbbf24' }}>{publishReadiness.unmapped_count + publishReadiness.partially_mapped_count}</strong> | Orphaned: <strong style={{ color: '#f87171' }}>{publishReadiness.orphaned_count}</strong>
+              </div>
+            </div>
+          </div>
+          {!publishReadiness.can_publish && (
+            <button
+              onClick={() => setIsPublishModalOpen(true)}
+              style={{
+                background: 'rgba(245, 158, 11, 0.2)',
+                border: '1px solid rgba(245, 158, 11, 0.4)',
+                color: '#fbbf24',
+                padding: '0.4rem 0.85rem',
+                borderRadius: '5px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem'
+              }}
+            >
+              <Eye size={14} /> Review Unmapped Lines
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Global Alerts */}
       {error && (
@@ -882,6 +1474,14 @@ export default function WorkPlan() {
                     <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
                       <div style={{ display: 'flex', justifyContent: 'center', gap: '0.35rem' }}>
                         <button
+                          onClick={() => handleOpenMapBoqModal(null, wp)}
+                          className="btn btn-sm"
+                          style={{ background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.35)', color: '#38bdf8', padding: '0.25rem 0.55rem', borderRadius: '4px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer', fontWeight: 600 }}
+                          title="Manage BOQ Mappings"
+                        >
+                          <FileSpreadsheet size={13} /> BOQ
+                        </button>
+                        <button
                           onClick={() => handleViewDetail(wp.id)}
                           className="btn btn-sm"
                           style={{ background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.3)', color: '#38bdf8', padding: '0.25rem 0.55rem', borderRadius: '4px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.2rem', cursor: 'pointer', fontWeight: 600 }}
@@ -940,14 +1540,70 @@ export default function WorkPlan() {
               <button onClick={() => setIsModalOpen(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><XCircle size={20} /></button>
             </div>
 
-            {/* Modal Form Body */}
-            <form onSubmit={handleSubmitForm} style={{ padding: '1.5rem' }}>
+            {/* Tab Navigation if Editing an Existing Activity */}
+            {editingWPId && (
+              <div style={{ display: 'flex', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(15, 23, 42, 0.7)', padding: '0 1.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditModalTab('details')}
+                  style={{
+                    padding: '0.75rem 1.25rem',
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: editModalTab === 'details' ? '2px solid #38bdf8' : '2px solid transparent',
+                    color: editModalTab === 'details' ? '#38bdf8' : '#94a3b8',
+                    fontWeight: 600,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  1. Activity Details
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditModalTab('boq')}
+                  style={{
+                    padding: '0.75rem 1.25rem',
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: editModalTab === 'boq' ? '2px solid #38bdf8' : '2px solid transparent',
+                    color: editModalTab === 'boq' ? '#38bdf8' : '#94a3b8',
+                    fontWeight: 600,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem'
+                  }}
+                >
+                  <FileSpreadsheet size={15} /> 2. BOQ Mapping ({boqMappings.length})
+                </button>
+              </div>
+            )}
 
-              {/* PROJECT & WBS SELECTION */}
-              <div style={{ marginBottom: '1.25rem', background: 'rgba(30, 41, 59, 0.4)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <h4 style={{ fontSize: '0.78rem', fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
-                  1. PROJECT & WBS RELATIONSHIP
-                </h4>
+            {editingWPId && editModalTab === 'boq' ? (
+              <div>
+                {renderBoqMappingSection()}
+                <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', justifyContent: 'flex-end', background: 'rgba(15, 23, 42, 0.95)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="btn btn-secondary"
+                    style={{ background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', fontWeight: 600, padding: '0.55rem 1.4rem', borderRadius: '6px', fontSize: '0.85rem', cursor: 'pointer' }}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Modal Form Body */
+              <form onSubmit={handleSubmitForm} style={{ padding: '1.5rem' }}>
+
+                {/* PROJECT & WBS SELECTION */}
+                <div style={{ marginBottom: '1.25rem', background: 'rgba(30, 41, 59, 0.4)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <h4 style={{ fontSize: '0.78rem', fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+                    1. PROJECT & WBS RELATIONSHIP
+                  </h4>
 
                 <div style={{ marginBottom: '1rem' }}>
                   <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '0.35rem' }}>
@@ -1101,6 +1757,29 @@ export default function WorkPlan() {
                 </div>
               </div>
 
+              {/* BOQ MAPPING DIRECT ACCESS CALLOUT (WHEN EDITING) */}
+              {editingWPId && (
+                <div style={{ background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '8px', padding: '0.85rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                  <div>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <FileSpreadsheet size={16} style={{ color: '#38bdf8' }} /> BOQ → Work Plan Mapping
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.15rem' }}>
+                      Status: <strong style={{ color: boqMappings.length > 0 ? '#34d399' : '#fbbf24' }}>
+                        {boqMappings.length > 0 ? `${boqMappings.length} BOQ Item(s) Mapped` : 'Not Mapped'}
+                      </strong>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditModalTab('boq')}
+                    style={{ background: 'linear-gradient(135deg, #0284c7, #0369a1)', border: 'none', color: '#ffffff', padding: '0.45rem 1rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                  >
+                    <Plus size={14} /> Map BOQ Items →
+                  </button>
+                </div>
+              )}
+
               {/* TIMELINE & SCHEDULING */}
               <div style={{ marginBottom: '1.25rem', background: 'rgba(30, 41, 59, 0.4)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <h4 style={{ fontSize: '0.78rem', fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
@@ -1222,6 +1901,7 @@ export default function WorkPlan() {
               </div>
 
             </form>
+          )}
           </div>
         </div>
       )}
@@ -1475,147 +2155,256 @@ export default function WorkPlan() {
         >
           <div 
             onClick={(e) => e.stopPropagation()}
-            style={{ background: '#0f172a', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '12px', width: '100%', maxWidth: '600px', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.6)' }}
+            style={{ background: '#0f172a', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '12px', width: '100%', maxWidth: '850px', maxHeight: '92vh', overflowY: 'auto', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.6)' }}
           >
             {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.85rem' }}>
               <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#38bdf8', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <FileSpreadsheet size={18} />
-                  {editingMappingId ? 'Edit BOQ Item Mapping' : 'Map BOQ Item to Work Plan'}
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#38bdf8', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <FileSpreadsheet size={20} />
+                  BOQ → Work Plan Activity Mapping
                 </h3>
-                <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '0.15rem 0 0 0' }}>
-                  Activity: <strong style={{ color: '#f8fafc' }}>{selectedWP.work_plan_number} — {selectedWP.activity_name}</strong>
+                <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0.2rem 0 0 0' }}>
+                  Project: <strong style={{ color: '#f8fafc' }}>{selectedWP.project_name}</strong> | Activity: <strong style={{ color: '#f8fafc' }}>{selectedWP.work_plan_number} — {selectedWP.activity_name}</strong>
                 </p>
               </div>
-              <button onClick={() => setIsMapBoqModalOpen(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><XCircle size={20} /></button>
+              <button onClick={() => setIsMapBoqModalOpen(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><XCircle size={22} /></button>
             </div>
 
-            {/* Work Plan Activity Unit Context Banner */}
-            <div style={{ background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '6px', padding: '0.55rem 0.85rem', marginBottom: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-              <span style={{ color: '#cbd5e1' }}>Work Plan Activity Unit:</span>
-              <span style={{ color: '#38bdf8', fontWeight: 700, background: 'rgba(56, 189, 248, 0.18)', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '0.15rem 0.55rem', borderRadius: '4px', fontSize: '0.82rem' }}>
-                {selectedWP.unit}
-              </span>
+            {renderBoqMappingSection()}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+              <button
+                type="button"
+                onClick={() => setIsMapBoqModalOpen(false)}
+                className="btn btn-secondary"
+                style={{ background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', fontWeight: 600, padding: '0.5rem 1.3rem', borderRadius: '6px', fontSize: '0.85rem', cursor: 'pointer' }}
+              >
+                Close
+              </button>
             </div>
-
-            {/* Form Body */}
-            <form onSubmit={handleSaveBoqMapping}>
-
-              {/* Project-scoped BOQ Item Selection */}
-              <div style={{ marginBottom: '1.1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '0.35rem' }}>
-                  Select Project BOQ Item *
-                </label>
-                {eligibleBoqItems.length === 0 ? (
-                  <div style={{ color: '#fbbf24', fontSize: '0.8rem', padding: '0.65rem', background: 'rgba(245,158,11,0.1)', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.2)' }}>
-                    No BOQ items found for project '{selectedWP.project_name}'. Create BOQ items in BOQ & Measurement Book module first.
-                  </div>
-                ) : (
-                  <select
-                    value={boqFormData.boq_item_id}
-                    onChange={handleBoqItemSelectChange}
-                    disabled={!!editingMappingId}
-                    style={{ 
-                      width: '100%', 
-                      background: '#1e293b', 
-                      border: (boqFormErrors.boq_item_id || (selectedBoqItemData && !selectedBoqItemData.is_unit_compatible)) 
-                        ? '1px solid #ef4444' 
-                        : '1px solid rgba(255,255,255,0.1)', 
-                      borderRadius: '6px', 
-                      padding: '0.55rem 0.75rem', 
-                      color: '#f8fafc', 
-                      fontSize: '0.85rem' 
-                    }}
-                  >
-                    <option value="">[ Select Project BOQ Item ]</option>
-                    
-                    {compatibleBoqItems.length > 0 && (
-                      <optgroup label={`✓ Compatible BOQ Items (${selectedWP.unit})`}>
-                        {compatibleBoqItems.map(b => (
-                          <option key={b.boq_item_id} value={b.boq_item_id}>
-                            {b.boq_code} — {b.item_name} ({b.approved_qty.toLocaleString()} {b.unit}) — Remaining: {b.remaining_unmapped_qty.toLocaleString()} {b.unit}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-
-                    {incompatibleBoqItems.length > 0 && (
-                      <optgroup label="⚠️ Incompatible BOQ Items (Different Unit)">
-                        {incompatibleBoqItems.map(b => (
-                          <option key={b.boq_item_id} value={b.boq_item_id}>
-                            {b.boq_code} — {b.item_name} ({b.approved_qty.toLocaleString()} {b.unit}) [Incompatible Unit]
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
-                )}
-                {boqFormErrors.boq_item_id && <div style={{ color: '#f87171', fontSize: '0.75rem', marginTop: '0.3rem' }}>{boqFormErrors.boq_item_id}</div>}
+          </div>
+        </div>
+      )}
+      {/* PUBLISH READINESS VALIDATION MODAL */}
+      {isPublishModalOpen && publishReadiness && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15,23,42,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1rem' }}>
+          <div style={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', width: '100%', maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto', padding: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.85rem' }}>
+              <div>
+                <h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.6rem', margin: 0 }}>
+                  <AlertTriangle style={{ color: '#fbbf24' }} size={24} />
+                  Work Plan Publish Readiness
+                </h2>
+                <p style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '0.2rem' }}>
+                  Project: <strong>{projects.find(p => p.id === parseInt(selectedProjectId, 10))?.name || selectedProjectId}</strong>
+                </p>
               </div>
+              <button onClick={() => setIsPublishModalOpen(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><XCircle size={22} /></button>
+            </div>
 
-              {/* Auto-populated BOQ Info Card */}
-              {selectedBoqItemData && (
-                <div style={{ background: 'rgba(30, 41, 59, 0.5)', border: selectedBoqItemData.is_unit_compatible ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', padding: '0.85rem 1rem', marginBottom: '1.1rem', fontSize: '0.82rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
-                  <div>
-                    <span style={{ color: '#64748b', fontSize: '0.7rem' }}>BOQ Item Name:</span>
-                    <div style={{ color: '#f8fafc', fontWeight: 600 }}>{selectedBoqItemData.item_name}</div>
-                  </div>
-                  <div>
-                    <span style={{ color: '#64748b', fontSize: '0.7rem' }}>BOQ Code:</span>
-                    <div style={{ color: '#38bdf8', fontWeight: 600 }}>{selectedBoqItemData.boq_code}</div>
-                  </div>
-                  <div>
-                    <span style={{ color: '#64748b', fontSize: '0.7rem' }}>BOQ Approved Quantity:</span>
-                    <div style={{ color: '#cbd5e1', fontWeight: 600 }}>{selectedBoqItemData.approved_qty.toLocaleString()} {selectedBoqItemData.unit}</div>
-                  </div>
-                  <div>
-                    <span style={{ color: '#64748b', fontSize: '0.7rem' }}>Remaining Unmapped Quantity:</span>
-                    <div style={{ color: '#fbbf24', fontWeight: 700 }}>{selectedBoqItemData.remaining_unmapped_qty.toLocaleString()} {selectedBoqItemData.unit}</div>
-                  </div>
+            {/* Status Summary Banner */}
+            <div style={{ background: publishReadiness.can_publish ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: publishReadiness.can_publish ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '1rem', marginBottom: '1.25rem' }}>
+              <div style={{ fontWeight: 600, color: publishReadiness.can_publish ? '#34d399' : '#f87171', fontSize: '0.95rem', marginBottom: '0.35rem' }}>
+                {publishReadiness.can_publish ? "✓ Work Plan 100% BOQ Mapped & Ready for Publish" : "⚠️ Work Plan Publication Blocked"}
+              </div>
+              {publishReadiness.blocking_reasons && publishReadiness.blocking_reasons.map((reason, idx) => (
+                <div key={idx} style={{ color: '#fca5a5', fontSize: '0.83rem', marginTop: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  • {reason}
+                </div>
+              ))}
+            </div>
+
+            {/* Orphaned Mappings Section */}
+            {publishReadiness.orphaned_mappings && publishReadiness.orphaned_mappings.length > 0 && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#f87171', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <AlertCircle size={18} /> Orphaned Mappings ({publishReadiness.orphaned_mappings.length})
+                </h3>
+                <div style={{ overflowX: 'auto', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(239,68,68,0.15)', color: '#fca5a5' }}>
+                        <th style={{ padding: '0.65rem 0.85rem' }}>Work Plan Activity</th>
+                        <th style={{ padding: '0.65rem 0.85rem' }}>Original BOQ</th>
+                        <th style={{ padding: '0.65rem 0.85rem' }}>Mapped Qty</th>
+                        <th style={{ padding: '0.65rem 0.85rem' }}>Reason</th>
+                        <th style={{ padding: '0.65rem 0.85rem' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {publishReadiness.orphaned_mappings.map((orph, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                          <td style={{ padding: '0.65rem 0.85rem', color: '#f8fafc', fontWeight: 600 }}>{orph.wbs_node_name}</td>
+                          <td style={{ padding: '0.65rem 0.85rem', color: '#cbd5e1' }}>{orph.original_boq_code} — {orph.original_boq_name}</td>
+                          <td style={{ padding: '0.65rem 0.85rem', color: '#cbd5e1' }}>{orph.mapped_quantity} {orph.unit}</td>
+                          <td style={{ padding: '0.65rem 0.85rem', color: '#f87171', fontStyle: 'italic' }}>{orph.orphaned_reason}</td>
+                          <td style={{ padding: '0.65rem 0.85rem' }}>
+                            <button
+                              onClick={() => { setIsPublishModalOpen(false); handleOpenRemapModal(orph); }}
+                              style={{ background: 'linear-gradient(135deg, #eab308, #ca8a04)', border: 'none', color: '#ffffff', padding: '0.35rem 0.75rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
+                            >
+                              Remap
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Unmapped / Partially Mapped BOQ Items Section */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#fbbf24', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <FileSpreadsheet size={18} /> Unmapped / Partially Mapped BOQ Items ({publishReadiness.unmapped_or_partial_items?.length || 0})
+              </h3>
+              {(!publishReadiness.unmapped_or_partial_items || publishReadiness.unmapped_or_partial_items.length === 0) ? (
+                <div style={{ color: '#34d399', fontSize: '0.85rem', padding: '0.75rem', background: 'rgba(16,185,129,0.1)', borderRadius: '6px' }}>
+                  ✓ All BOQ items for this project are 100% mapped!
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ background: '#1e293b', color: '#cbd5e1' }}>
+                        <th style={{ padding: '0.65rem 0.85rem' }}>BOQ Code</th>
+                        <th style={{ padding: '0.65rem 0.85rem' }}>Description</th>
+                        <th style={{ padding: '0.65rem 0.85rem' }}>BOQ Total Qty</th>
+                        <th style={{ padding: '0.65rem 0.85rem' }}>Mapped Qty</th>
+                        <th style={{ padding: '0.65rem 0.85rem' }}>Remaining Unmapped</th>
+                        <th style={{ padding: '0.65rem 0.85rem' }}>Status</th>
+                        <th style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {publishReadiness.unmapped_or_partial_items.map((item, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                          <td style={{ padding: '0.65rem 0.85rem', color: '#38bdf8', fontWeight: 600 }}>{item.boq_code}</td>
+                          <td style={{ padding: '0.65rem 0.85rem', color: '#f8fafc' }}>{item.description}</td>
+                          <td style={{ padding: '0.65rem 0.85rem', color: '#cbd5e1' }}>{item.boq_quantity.toLocaleString()} {item.unit}</td>
+                          <td style={{ padding: '0.65rem 0.85rem', color: '#cbd5e1' }}>{item.mapped_quantity.toLocaleString()} {item.unit}</td>
+                          <td style={{ padding: '0.65rem 0.85rem', color: '#fbbf24', fontWeight: 700 }}>{item.remaining_quantity.toLocaleString()} {item.unit}</td>
+                          <td style={{ padding: '0.65rem 0.85rem' }}>
+                            <span style={{
+                              background: item.status === 'UNMAPPED' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)',
+                              color: item.status === 'UNMAPPED' ? '#f87171' : '#fbbf24',
+                              padding: '0.15rem 0.45rem',
+                              borderRadius: '4px',
+                              fontSize: '0.72rem',
+                              fontWeight: 600
+                            }}>
+                              {item.status}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsPublishModalOpen(false);
+                                const targetWp = workPlans.find(w => w.project_id === parseInt(selectedProjectId, 10));
+                                if (targetWp) {
+                                  handleOpenMapBoqModal(null, targetWp, item.boq_item_id);
+                                }
+                              }}
+                              style={{
+                                background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                                border: 'none',
+                                color: '#ffffff',
+                                padding: '0.3rem 0.75rem',
+                                borderRadius: '4px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem'
+                              }}
+                            >
+                              <Plus size={12} /> Map Now
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
+            </div>
 
-              {/* Unit Incompatibility Warning */}
-              {selectedBoqItemData && !selectedBoqItemData.is_unit_compatible && (
-                <div style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', padding: '0.75rem 0.85rem', marginBottom: '1.1rem', color: '#f87171', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <AlertCircle size={18} style={{ flexShrink: 0 }} />
-                  <div>
-                    <strong>Incompatible Unit:</strong> BOQ item unit (<strong>{selectedBoqItemData.unit}</strong>) does not match Work Plan unit (<strong>{selectedWP.unit}</strong>). Cannot save mapping.
-                  </div>
-                </div>
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
+              <button
+                type="button"
+                onClick={() => setIsPublishModalOpen(false)}
+                className="btn btn-secondary"
+                style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', padding: '0.5rem 1.25rem', borderRadius: '6px', cursor: 'pointer' }}
+              >
+                Close
+              </button>
+              {publishReadiness.can_publish && (
+                <button
+                  type="button"
+                  onClick={handlePublishWorkPlan}
+                  disabled={publishLoading}
+                  className="btn btn-primary"
+                  style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', color: '#ffffff', fontWeight: 600, padding: '0.5rem 1.25rem', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  {publishLoading ? "Publishing..." : "Publish Work Plan Now"}
+                </button>
               )}
+            </div>
 
-              {/* Mapped Quantity Field */}
+          </div>
+        </div>
+      )}
+
+      {/* ORPHANED MAPPING REMAP MODAL */}
+      {isRemapModalOpen && targetOrphanedMapping && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15,23,42,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '1rem' }}>
+          <div style={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', width: '100%', maxWidth: '550px', padding: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.85rem' }}>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                <Link style={{ color: '#eab308' }} size={22} />
+                Remap Orphaned BOQ Mapping
+              </h2>
+              <button onClick={() => setIsRemapModalOpen(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><XCircle size={20} /></button>
+            </div>
+
+            <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '6px', padding: '0.85rem 1rem', marginBottom: '1.25rem', fontSize: '0.82rem' }}>
+              <div style={{ color: '#f87171', fontWeight: 600, marginBottom: '0.35rem' }}>Orphaned Mapping Info:</div>
+              <div style={{ color: '#cbd5e1' }}>Activity: <strong>{targetOrphanedMapping.wbs_node_name}</strong></div>
+              <div style={{ color: '#cbd5e1' }}>Original BOQ: <strong>{targetOrphanedMapping.original_boq_code} — {targetOrphanedMapping.original_boq_name}</strong></div>
+              <div style={{ color: '#cbd5e1' }}>Mapped Qty: <strong>{targetOrphanedMapping.mapped_quantity} {targetOrphanedMapping.unit}</strong></div>
+            </div>
+
+            <form onSubmit={handleExecuteRemap}>
               <div style={{ marginBottom: '1.25rem' }}>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '0.35rem' }}>
-                  Mapped Quantity ({selectedBoqItemData ? selectedBoqItemData.unit : selectedWP.unit}) *
+                  Select Replacement BOQ Item in Approved Estimate *
                 </label>
-                <input
-                  type="number"
-                  step="any"
-                  placeholder={`Enter quantity in ${selectedBoqItemData ? selectedBoqItemData.unit : selectedWP.unit}...`}
-                  value={boqFormData.mapped_quantity}
-                  onChange={(e) => setBoqFormData(prev => ({ ...prev, mapped_quantity: e.target.value }))}
-                  disabled={selectedBoqItemData && !selectedBoqItemData.is_unit_compatible}
-                  style={{ 
-                    width: '100%', 
-                    background: (selectedBoqItemData && !selectedBoqItemData.is_unit_compatible) ? '#0f172a' : '#1e293b', 
-                    border: boqFormErrors.mapped_quantity ? '1px solid #ef4444' : '1px solid rgba(255,255,255,0.1)', 
-                    borderRadius: '6px', 
-                    padding: '0.55rem 0.75rem', 
-                    color: (selectedBoqItemData && !selectedBoqItemData.is_unit_compatible) ? '#64748b' : '#f8fafc', 
-                    fontSize: '0.85rem' 
-                  }}
-                />
-                {boqFormErrors.mapped_quantity && <div style={{ color: '#f87171', fontSize: '0.75rem', marginTop: '0.3rem' }}>{boqFormErrors.mapped_quantity}</div>}
+                <select
+                  value={selectedRemapBoqId}
+                  onChange={(e) => setSelectedRemapBoqId(e.target.value)}
+                  required
+                  style={{ width: '100%', background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', padding: '0.6rem 0.75rem', color: '#f8fafc', fontSize: '0.85rem' }}
+                >
+                  <option value="">[ Select Replacement BOQ Item ]</option>
+                  {eligibleBoqItems.map(b => (
+                    <option key={b.boq_item_id} value={b.boq_item_id}>
+                      {b.boq_code} — {b.item_name} ({b.approved_qty.toLocaleString()} {b.unit}) — Remaining: {b.remaining_unmapped_qty.toLocaleString()} {b.unit}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* Modal Actions */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
                 <button
                   type="button"
-                  onClick={() => setIsMapBoqModalOpen(false)}
+                  onClick={() => setIsRemapModalOpen(false)}
                   className="btn btn-secondary"
                   style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', padding: '0.45rem 1rem', borderRadius: '6px', cursor: 'pointer' }}
                 >
@@ -1623,23 +2412,13 @@ export default function WorkPlan() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSaveBoqDisabled}
+                  disabled={!selectedRemapBoqId || remapLoading}
                   className="btn btn-primary"
-                  style={{ 
-                    background: isSaveBoqDisabled ? '#334155' : 'linear-gradient(135deg, #0284c7, #0369a1)', 
-                    border: 'none', 
-                    color: isSaveBoqDisabled ? '#94a3b8' : '#ffffff', 
-                    fontWeight: 600, 
-                    padding: '0.45rem 1.2rem', 
-                    borderRadius: '6px', 
-                    cursor: isSaveBoqDisabled ? 'not-allowed' : 'pointer', 
-                    opacity: isSaveBoqDisabled ? 0.5 : 1 
-                  }}
+                  style={{ background: 'linear-gradient(135deg, #eab308, #ca8a04)', border: 'none', color: '#ffffff', fontWeight: 600, padding: '0.45rem 1.25rem', borderRadius: '6px', cursor: 'pointer' }}
                 >
-                  Save Mapping
+                  {remapLoading ? "Remapping..." : "Save Remapping"}
                 </button>
               </div>
-
             </form>
 
           </div>

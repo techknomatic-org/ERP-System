@@ -102,6 +102,44 @@ def auto_init_db():
                 add_col_if_missing("site_daily_logs", col, col_type)
 
             add_col_if_missing("measurement_books", "site_log_id", "INT NULL")
+            add_col_if_missing("measurement_books", "wbs_node_id", "INT NULL")
+            add_col_if_missing("measurement_books", "client_uuid", "VARCHAR(64) NULL UNIQUE")
+            add_col_if_missing("measurement_books", "description", "TEXT NULL")
+            add_col_if_missing("measurement_books", "measurement_method", "VARCHAR(30) NULL DEFAULT 'LBH'")
+            add_col_if_missing("measurement_books", "length", "DECIMAL(12, 4) NULL")
+            add_col_if_missing("measurement_books", "breadth", "DECIMAL(12, 4) NULL")
+            add_col_if_missing("measurement_books", "height", "DECIMAL(12, 4) NULL")
+            add_col_if_missing("measurement_books", "direct_quantity", "DECIMAL(14, 4) NULL")
+            add_col_if_missing("measurement_books", "computed_quantity", "DECIMAL(14, 4) NULL")
+            add_col_if_missing("measurement_books", "photo_url", "VARCHAR(500) NULL")
+            add_col_if_missing("measurement_books", "photo_metadata", "TEXT NULL")
+            add_col_if_missing("measurement_books", "contractor_rep_signer_id", "INT NULL")
+            add_col_if_missing("measurement_books", "contractor_rep_signed_at", "DATETIME NULL")
+            add_col_if_missing("measurement_books", "contractor_rep_signature_reference", "VARCHAR(255) NULL")
+            add_col_if_missing("measurement_books", "je_signer_id", "INT NULL")
+            add_col_if_missing("measurement_books", "je_signed_at", "DATETIME NULL")
+            add_col_if_missing("measurement_books", "je_signature_reference", "VARCHAR(255) NULL")
+            add_col_if_missing("measurement_books", "correction_of_id", "INT NULL")
+            add_col_if_missing("measurement_books", "correction_reason", "TEXT NULL")
+            add_col_if_missing("measurement_books", "is_stale", "TINYINT(1) DEFAULT 0")
+            add_col_if_missing("measurement_books", "is_offline_sync", "TINYINT(1) DEFAULT 0")
+            add_col_if_missing("measurement_books", "synced_at", "DATETIME NULL")
+            add_col_if_missing("measurement_books", "created_by_id", "INT NULL")
+            add_col_if_missing("measurement_books", "updated_at", "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
+
+            # Make nullable for flexibility in e-MB
+            try:
+                cursor.execute("ALTER TABLE `measurement_books` MODIFY COLUMN `boq_item_id` INT NULL;")
+                cursor.execute("ALTER TABLE `measurement_books` MODIFY COLUMN `engineer_id` INT NULL;")
+                cursor.execute("ALTER TABLE `measurement_books` MODIFY COLUMN `location_zone` VARCHAR(100) NULL;")
+            except Exception as e:
+                print(f"[DB Initializer Note] {e}")
+
+            # hindrance_records mobile offline sync columns
+            add_col_if_missing("hindrance_records", "client_uuid", "VARCHAR(64) NULL UNIQUE")
+            add_col_if_missing("hindrance_records", "is_offline_sync", "TINYINT(1) DEFAULT 0")
+            add_col_if_missing("hindrance_records", "synced_at", "DATETIME NULL")
+
             add_col_if_missing("wbs_tasks", "wbs_code", "VARCHAR(50) NULL")
             add_col_if_missing("boq_items", "sor_id", "INT NULL")
 

@@ -528,6 +528,11 @@ def create_site_daily_log(
                         wbs_task.status = "in_progress"
 
                 recalculate_project_wbs(db, site_log.project_id)
+                try:
+                    from app.api.milestones import recalculate_milestones_for_wbs_node
+                    recalculate_milestones_for_wbs_node(db, wbs_target_id)
+                except Exception as e:
+                    print(f"[Milestone Recalc SiteLog Note] {e}")
 
     # Fetch project details for approval task title
     project = db.query(Project).filter(Project.id == site_log.project_id).first()

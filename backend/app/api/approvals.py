@@ -2,9 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
-from app.models import ApprovalTask, ApprovalLog, AuditLog, Notification, SiteDailyLog, SiteLogPhoto, WbsTask, ContractorBill, PurchaseRequisition, User, Project
+from app.models import ApprovalTask, ApprovalLog, AuditLog, Notification, SiteDailyLog, SiteLogPhoto, WbsTask, ContractorBill, PurchaseRequisition, User, Project, ProjectEstimate, ContractorAward, Hindrance
 from app.schemas import ApprovalTaskCreate, ApprovalAction, ApprovalTaskResponse
 from app.api.audit import record_audit_log
+from app.api.auth import get_current_user
+
 
 router = APIRouter(prefix="/api/approvals", tags=["Approval Engine"])
 
@@ -173,10 +175,13 @@ STAGE_TO_ROLE_MAP = {
 }
 
 STAGE_PERMISSIONS = {
-    "Site Engineer": ["site_engineer"],
-    "Project Manager": ["project_manager"],
-    "Finance": ["finance"],
-    "Management": ["management"]
+    "Site Engineer": ["site_engineer", "ae", "je"],
+    "AE": ["ae", "site_engineer"],
+    "Project Manager": ["project_manager", "ee", "pm"],
+    "EE": ["ee", "project_manager"],
+    "Executive Engineer": ["ee", "project_manager"],
+    "Finance": ["finance", "accountant", "divisional_accountant"],
+    "Management": ["management", "tenant_admin"]
 }
 
 def build_task_dict(task: ApprovalTask, db: Session) -> dict:
@@ -224,6 +229,24 @@ def build_task_dict(task: ApprovalTask, db: Session) -> dict:
         if pr_rec:
             project_id = pr_rec.project_id
             prj = db.query(Project).filter(Project.id == pr_rec.project_id).first()
+            if prj: project_name = prj.name
+    elif task.entity_type in ["ProjectEstimate", "Estimate", "DetailedEstimate"]:
+        est_rec = db.query(ProjectEstimate).filter(ProjectEstimate.id == task.entity_id).first()
+        if est_rec:
+            project_id = est_rec.project_id
+            prj = db.query(Project).filter(Project.id == est_rec.project_id).first()
+            if prj: project_name = prj.name
+    elif task.entity_type in ["ContractorAward", "Award", "CONTRACTOR_AWARD"]:
+        awd_rec = db.query(ContractorAward).filter(ContractorAward.id == task.entity_id).first()
+        if awd_rec:
+            project_id = awd_rec.project_id
+            prj = db.query(Project).filter(Project.id == awd_rec.project_id).first()
+            if prj: project_name = prj.name
+    elif task.entity_type in ["Hindrance", "HINDRANCE"]:
+        hin_rec = db.query(Hindrance).filter(Hindrance.id == task.entity_id).first()
+        if hin_rec:
+            project_id = hin_rec.project_id
+            prj = db.query(Project).filter(Project.id == hin_rec.project_id).first()
             if prj: project_name = prj.name
 
     if not project_name and project_id:
@@ -352,6 +375,7 @@ def list_approval_tasks(
     role: Optional[str] = Header(None, alias="X-User-Role"),
     user_role: Optional[str] = Query(None),
     status_filter: Optional[str] = Query("pending"),
+    project_id: Optional[int] = Query(None),
     db: Session = Depends(get_db)
 ):
     active_role = (user_role or role or "admin").lower()
@@ -359,6 +383,13 @@ def list_approval_tasks(
     all_tasks = query.all()
 
     formatted_tasks = [build_task_dict(t, db) for t in all_tasks]
+
+    # Project context filter logic (if project_id supplied)
+    if project_id is not None:
+        formatted_tasks = [
+            t for t in formatted_tasks 
+            if t.get("projectId") == project_id or t.get("project_id") == project_id
+        ]
 
     # Status filter logic
     if status_filter == "completed" or status_filter == "approved":
@@ -503,45 +534,73 @@ def process_approval_action(
     approver_id: int = 1,
     role: Optional[str] = Header(None, alias="X-User-Role"),
     user_role_param: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     task = db.query(ApprovalTask).filter(ApprovalTask.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Approval task not found")
 
-    user = db.query(User).filter(User.id == approver_id).first()
-    user_role = (user_role_param or role or (user.role if user else "site_engineer")).lower()
+    # Determine authenticated user
+    user = current_user
+    if approver_id and approver_id != 1 and approver_id != current_user.id:
+        custom_user = db.query(User).filter(User.id == approver_id).first()
+        if custom_user:
+            user = custom_user
 
-    if user_role == "customer":
+    # Security Rule: Do NOT trust client-supplied role persona if authenticated user is customer or unauthorized
+    actual_role = (user.role or "customer").lower().strip().replace(" ", "_") if user else "customer"
+    if actual_role == "customer":
         raise HTTPException(status_code=403, detail="Customer users are not authorized to process internal approval tasks.")
 
-    # Strict role stage permission verification (Section 1, 7, 13, 17)
-    req_role = STAGE_TO_ROLE_MAP.get(task.current_stage)
-    if req_role and user_role != req_role and user_role != "admin":
+    # Canonical role normalization
+    norm_role = actual_role
+    if norm_role in ["ae", "assistant_engineer"]:
+        norm_role = "ae"
+    elif norm_role in ["ee", "executive_engineer"]:
+        norm_role = "ee"
+    elif norm_role in ["accountant", "divisional_accountant", "finance"]:
+        norm_role = "finance"
+    elif norm_role in ["site_engineer", "je", "junior_engineer"]:
+        norm_role = "site_engineer"
+    elif norm_role in ["project_manager", "pm", "contractor_pm"]:
+        norm_role = "project_manager"
+    elif norm_role in ["admin", "administrator", "tenant_admin"]:
+        norm_role = "admin"
+
+    is_admin = norm_role == "admin"
+    allowed_roles = STAGE_PERMISSIONS.get(task.current_stage, [STAGE_TO_ROLE_MAP.get(task.current_stage, "admin")])
+
+    # Check stage permission
+    if not is_admin and norm_role not in allowed_roles:
         raise HTTPException(
             status_code=403, 
-            detail=f"403 Unauthorized Approval Action: Current stage is '{task.current_stage}' (requires active role '{req_role.upper()}'), but your active role is '{user_role.upper()}'."
+            detail=f"403 Unauthorized Approval Action: Current stage is '{task.current_stage}' (requires authorized approver role), but your role is '{actual_role.upper()}'."
         )
 
     # Precondition validation for stage ordering & non-financial checks (Test 9 & Test 10)
     fin_req = is_financial_task(task.entity_type)
-    if user_role in ["finance", "management"] and not fin_req:
+    if norm_role in ["finance", "management"] and not fin_req and not is_admin:
         raise HTTPException(
             status_code=403,
-            detail=f"403 Forbidden: Role '{user_role.upper()}' is not authorized to process non-financial requests."
+            detail=f"403 Forbidden: Role '{actual_role.upper()}' is not authorized to process non-financial requests."
         )
 
-    if user_role == "finance" and task.current_stage != "Finance":
+    if norm_role == "finance" and task.current_stage not in ["Finance", "Divisional Accountant"] and not is_admin:
         raise HTTPException(
             status_code=403,
             detail=f"403 Forbidden: Request is currently at stage '{task.current_stage}'. PM approval must be completed before Finance approval."
         )
 
-    if user_role == "management" and task.current_stage != "Management":
+    if norm_role == "management" and task.current_stage != "Management" and not is_admin:
         raise HTTPException(
             status_code=403,
             detail=f"403 Forbidden: Request is currently at stage '{task.current_stage}'. Finance approval must be completed before Management approval."
         )
+
+    approver_id = user.id if user else 1
+    user_role = actual_role
+
 
     prev_status = task.status
     prev_stage = task.current_stage

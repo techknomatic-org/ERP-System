@@ -9,7 +9,8 @@ from app.models import WorkPlan, Project, WbsTask, User, BoqItem, WorkPlanBoqMap
 from app.schemas import (
     WorkPlanCreate, WorkPlanUpdate, WorkPlanResponse,
     WorkPlanBoqMappingCreate, WorkPlanBoqMappingUpdate, WorkPlanBoqMappingResponse,
-    EligibleBoqItemForMappingResponse
+    EligibleBoqItemForMappingResponse, WorkPlanBoqRemapRequest, UnmappedBoqItemSummary,
+    OrphanedMappingSummary, WorkPlanPublishReadinessResponse
 )
 
 router = APIRouter(prefix="/api/work-plans", tags=["Work Plan Management"])
@@ -345,15 +346,19 @@ def archive_work_plan(wp_id: int, db: Session = Depends(get_db)):
 
 
 # ==============================================================================
-# FEATURE 2: MAP BOQ ITEMS WITH WORK PLAN ENDPOINTS & VALIDATIONS
+# FEATURE 2: MAP BOQ ITEMS WITH WORK PLAN ENDPOINTS & VALIDATIONS (WPT-02)
 # ==============================================================================
 
-def get_boq_total_allocated_qty(boq_item_id: int, db: Session, exclude_mapping_id: Optional[int] = None) -> float:
-    query = db.query(func.sum(WorkPlanBoqMapping.mapped_quantity)).filter(WorkPlanBoqMapping.boq_item_id == boq_item_id)
+def get_boq_total_allocated_qty(boq_item_id: int, db: Session, exclude_mapping_id: Optional[int] = None, for_update: bool = False) -> float:
+    query = db.query(WorkPlanBoqMapping).filter(
+        WorkPlanBoqMapping.boq_item_id == boq_item_id,
+        WorkPlanBoqMapping.is_orphaned == False
+    )
+    if for_update:
+        query = query.with_for_update()
     if exclude_mapping_id:
         query = query.filter(WorkPlanBoqMapping.id != exclude_mapping_id)
-    val = query.scalar()
-    return float(val or 0.0)
+    return float(sum(float(m.mapped_quantity) for m in query.all()))
 
 
 @router.get("/{wp_id}/boq-mappings", response_model=List[WorkPlanBoqMappingResponse])
@@ -367,22 +372,29 @@ def get_work_plan_boq_mappings(wp_id: int, db: Session = Depends(get_db)):
 
     for m in mappings:
         boq = db.query(BoqItem).filter(BoqItem.id == m.boq_item_id).first()
-        boq_code = f"BOQ-{boq.id:03d}" if boq else f"BOQ-{m.boq_item_id}"
-        boq_desc = boq.item_name if boq else "N/A"
+        is_orphaned = getattr(m, 'is_orphaned', False) or (boq is None)
+        
+        boq_code = f"BOQ-{boq.id:03d}" if boq else (m.original_boq_code or f"BOQ-{m.boq_item_id}")
+        boq_desc = boq.item_name if boq else (m.original_boq_name or "Orphaned Item")
         boq_unit = boq.unit if boq else m.unit
         boq_total_qty = float(boq.approved_qty) if boq else 0.0
         rate = float(boq.rate) if boq else 0.0
         est_amount = rate * float(m.mapped_quantity)
 
-        total_allocated = get_boq_total_allocated_qty(m.boq_item_id, db)
-        remaining = max(0.0, boq_total_qty - total_allocated)
+        total_allocated = get_boq_total_allocated_qty(m.boq_item_id, db) if boq else 0.0
+        remaining = max(0.0, boq_total_qty - total_allocated) if boq else 0.0
 
-        if total_allocated >= boq_total_qty and boq_total_qty > 0:
+        if is_orphaned:
+            mapping_st = "Orphaned — requires remapping"
+        elif abs(total_allocated - boq_total_qty) < 1e-5 and boq_total_qty > 0:
             mapping_st = "FULLY ALLOCATED"
         elif total_allocated > 0:
             mapping_st = "PARTIALLY MAPPED"
         else:
             mapping_st = "MAPPED"
+
+        wbs_task = db.query(WbsTask).filter(WbsTask.id == wp.task_id).first() if wp and wp.task_id else None
+        wbs_node_name = wbs_task.title if wbs_task else (wp.activity_name if wp else "N/A")
 
         results.append(WorkPlanBoqMappingResponse(
             id=m.id,
@@ -401,7 +413,82 @@ def get_work_plan_boq_mappings(wp_id: int, db: Session = Depends(get_db)):
             remaining_quantity=round(remaining, 2),
             rate=rate,
             estimated_amount=round(est_amount, 2),
-            mapping_status=mapping_st
+            mapping_status=mapping_st,
+            is_orphaned=is_orphaned,
+            orphaned_reason=m.orphaned_reason or ("BOQ Item no longer exists in Detailed Estimate." if is_orphaned else None),
+            original_boq_code=m.original_boq_code or boq_code,
+            original_boq_name=m.original_boq_name or boq_desc,
+            de_revision_number=getattr(m, 'de_revision_number', 0),
+            wbs_node_name=wbs_node_name,
+            work_plan_number=wp.work_plan_number if wp else None,
+            activity_name=wp.activity_name if wp else None
+        ))
+
+    return results
+
+
+@router.get("/project/{project_id}/boq-mappings", response_model=List[WorkPlanBoqMappingResponse])
+def get_project_boq_mappings(project_id: int, db: Session = Depends(get_db)):
+    proj = db.query(Project).filter(Project.id == project_id).first()
+    if not proj:
+        raise HTTPException(status_code=404, detail=f"Project #{project_id} not found.")
+
+    mappings = db.query(WorkPlanBoqMapping).filter(WorkPlanBoqMapping.project_id == proj.id).all()
+    results = []
+
+    for m in mappings:
+        wp = db.query(WorkPlan).filter(WorkPlan.id == m.work_plan_id).first()
+        boq = db.query(BoqItem).filter(BoqItem.id == m.boq_item_id).first()
+        is_orphaned = getattr(m, 'is_orphaned', False) or (boq is None)
+        
+        boq_code = f"BOQ-{boq.id:03d}" if boq else (m.original_boq_code or f"BOQ-{m.boq_item_id}")
+        boq_desc = boq.item_name if boq else (m.original_boq_name or "Orphaned Item")
+        boq_unit = boq.unit if boq else m.unit
+        boq_total_qty = float(boq.approved_qty) if boq else 0.0
+        rate = float(boq.rate) if boq else 0.0
+        est_amount = rate * float(m.mapped_quantity)
+
+        total_allocated = get_boq_total_allocated_qty(m.boq_item_id, db) if boq else 0.0
+        remaining = max(0.0, boq_total_qty - total_allocated) if boq else 0.0
+
+        if is_orphaned:
+            mapping_st = "Orphaned — requires remapping"
+        elif abs(total_allocated - boq_total_qty) < 1e-5 and boq_total_qty > 0:
+            mapping_st = "FULLY ALLOCATED"
+        elif total_allocated > 0:
+            mapping_st = "PARTIALLY MAPPED"
+        else:
+            mapping_st = "MAPPED"
+
+        wbs_task = db.query(WbsTask).filter(WbsTask.id == wp.task_id).first() if wp and wp.task_id else None
+        wbs_node_name = wbs_task.title if wbs_task else (wp.activity_name if wp else "N/A")
+
+        results.append(WorkPlanBoqMappingResponse(
+            id=m.id,
+            work_plan_id=m.work_plan_id,
+            boq_item_id=m.boq_item_id,
+            project_id=m.project_id,
+            mapped_quantity=float(m.mapped_quantity),
+            unit=m.unit,
+            created_at=m.created_at,
+            updated_at=m.updated_at,
+            boq_code=boq_code,
+            boq_description=boq_desc,
+            boq_unit=boq_unit,
+            boq_total_quantity=boq_total_qty,
+            total_allocated_quantity=round(total_allocated, 2),
+            remaining_quantity=round(remaining, 2),
+            rate=rate,
+            estimated_amount=round(est_amount, 2),
+            mapping_status=mapping_st,
+            is_orphaned=is_orphaned,
+            orphaned_reason=m.orphaned_reason or ("BOQ Item no longer exists in Detailed Estimate." if is_orphaned else None),
+            original_boq_code=m.original_boq_code or boq_code,
+            original_boq_name=m.original_boq_name or boq_desc,
+            de_revision_number=getattr(m, 'de_revision_number', 0),
+            wbs_node_name=wbs_node_name,
+            work_plan_number=wp.work_plan_number if wp else None,
+            activity_name=wp.activity_name if wp else None
         ))
 
     return results
@@ -413,8 +500,18 @@ def get_eligible_boq_items_for_mapping(wp_id: int, db: Session = Depends(get_db)
     if not wp:
         raise HTTPException(status_code=404, detail=f"Work plan activity #{wp_id} not found.")
 
-    # Strictly filter to BOQ items belonging to the same project
-    boq_items = db.query(BoqItem).filter(BoqItem.project_id == wp.project_id).all()
+    # Prioritize BOQ items from the current Detailed Estimate if one exists
+    from app.models import ProjectEstimate, ProjectEstimateLine
+    current_de = db.query(ProjectEstimate).filter(
+        ProjectEstimate.project_id == wp.project_id
+    ).order_by(ProjectEstimate.revision_number.desc(), ProjectEstimate.id.desc()).first()
+
+    if current_de and current_de.lines:
+        line_boq_ids = [line.boq_item_id for line in current_de.lines]
+        boq_items = db.query(BoqItem).filter(BoqItem.id.in_(line_boq_ids)).all()
+    else:
+        boq_items = db.query(BoqItem).filter(BoqItem.project_id == wp.project_id).all()
+
     results = []
 
     for boq in boq_items:
@@ -443,19 +540,64 @@ def get_eligible_boq_items_for_mapping(wp_id: int, db: Session = Depends(get_db)
     return results
 
 
+@router.get("/project/{project_id}/eligible-boq-items", response_model=List[EligibleBoqItemForMappingResponse])
+def get_project_eligible_boq_items(project_id: int, db: Session = Depends(get_db)):
+    proj = db.query(Project).filter(Project.id == project_id).first()
+    if not proj:
+        raise HTTPException(status_code=404, detail=f"Project #{project_id} not found.")
+
+    from app.models import ProjectEstimate, ProjectEstimateLine
+    current_de = db.query(ProjectEstimate).filter(
+        ProjectEstimate.project_id == proj.id
+    ).order_by(ProjectEstimate.revision_number.desc(), ProjectEstimate.id.desc()).first()
+
+    if current_de and current_de.lines:
+        line_boq_ids = [line.boq_item_id for line in current_de.lines]
+        boq_items = db.query(BoqItem).filter(BoqItem.id.in_(line_boq_ids)).all()
+    else:
+        boq_items = db.query(BoqItem).filter(BoqItem.project_id == proj.id).all()
+
+    results = []
+    for boq in boq_items:
+        total_allocated = get_boq_total_allocated_qty(boq.id, db)
+        boq_qty = float(boq.approved_qty or 0.0)
+        remaining = max(0.0, boq_qty - total_allocated)
+        boq_code = f"BOQ-{boq.id:03d}"
+
+        results.append(EligibleBoqItemForMappingResponse(
+            boq_item_id=boq.id,
+            boq_code=boq_code,
+            item_name=boq.item_name,
+            unit=boq.unit,
+            approved_qty=boq_qty,
+            total_allocated_qty=round(total_allocated, 2),
+            remaining_unmapped_qty=round(remaining, 2),
+            rate=float(boq.rate or 0.0),
+            total_amount=float(boq.total_amount or 0.0),
+            is_unit_compatible=True,
+            compatibility_warning=None
+        ))
+    return results
+
+
 @router.post("/{wp_id}/boq-mappings", response_model=WorkPlanBoqMappingResponse, status_code=201)
 def create_work_plan_boq_mapping(
     wp_id: int,
     payload: WorkPlanBoqMappingCreate,
     db: Session = Depends(get_db)
 ):
-    # 1. Verify Work Plan
-    wp = db.query(WorkPlan).filter(WorkPlan.id == wp_id).first()
+    # 1. Resolve Target Work Plan (supports mapping to a specific WBS node / activity)
+    target_wp_id = payload.work_plan_id or wp_id
+    wp = db.query(WorkPlan).filter(WorkPlan.id == target_wp_id).first()
+    if not wp and payload.wbs_node_id:
+        wp = db.query(WorkPlan).filter(WorkPlan.task_id == payload.wbs_node_id).first()
+    if not wp:
+        wp = db.query(WorkPlan).filter(WorkPlan.id == wp_id).first()
     if not wp:
         raise HTTPException(status_code=404, detail=f"Work plan activity #{wp_id} not found.")
 
     # 2. Verify BOQ Item
-    boq = db.query(BoqItem).filter(BoqItem.id == payload.boq_item_id).first()
+    boq = db.query(BoqItem).filter(BoqItem.id == payload.boq_item_id).with_for_update().first()
     if not boq:
         raise HTTPException(status_code=404, detail=f"BOQ Item ID {payload.boq_item_id} not found.")
 
@@ -476,13 +618,8 @@ def create_work_plan_boq_mapping(
 
     # 5. Validate Unit Compatibility
     target_unit = payload.unit.strip() if payload.unit else boq.unit
-    if not is_unit_compatible(wp.unit, target_unit):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unit compatibility error! Work Plan unit ('{wp.unit}') is incompatible with BOQ item unit ('{target_unit}')."
-        )
 
-    # 6. Prevent Duplicate Mapping
+    # 6. Prevent Duplicate Mapping on the same activity
     existing = db.query(WorkPlanBoqMapping).filter(
         WorkPlanBoqMapping.work_plan_id == wp.id,
         WorkPlanBoqMapping.boq_item_id == boq.id
@@ -493,15 +630,16 @@ def create_work_plan_boq_mapping(
             detail=f"BOQ item '{boq.item_name}' is already mapped to Work Plan activity {wp.work_plan_number}. Edit the existing mapping instead."
         )
 
-    # 7. Validate Total Allocated Quantity vs BOQ Approved Quantity
-    already_allocated = get_boq_total_allocated_qty(boq.id, db)
+    # 7. Validate Total Allocated Quantity vs BOQ Approved Quantity with Concurrency Lock
+    already_allocated = get_boq_total_allocated_qty(boq.id, db, for_update=True)
     boq_qty = float(boq.approved_qty or 0.0)
     remaining_qty = max(0.0, boq_qty - already_allocated)
 
     if payload.mapped_quantity > remaining_qty + 1e-6:
+        rem_str = f"{remaining_qty:g}"
         raise HTTPException(
             status_code=400,
-            detail=f"Mapped quantity ({payload.mapped_quantity:.2f} {target_unit}) exceeds remaining unmapped BOQ quantity ({remaining_qty:.2f} {target_unit}). Total BOQ quantity is {boq_qty:.2f} {target_unit}."
+            detail=f"Mapped quantity exceeds remaining unmapped quantity. Remaining balance: {rem_str} {target_unit}."
         )
 
     # Create persistent mapping
@@ -510,7 +648,10 @@ def create_work_plan_boq_mapping(
         boq_item_id=boq.id,
         project_id=wp.project_id,
         mapped_quantity=payload.mapped_quantity,
-        unit=target_unit
+        unit=target_unit,
+        is_orphaned=False,
+        original_boq_code=f"BOQ-{boq.id:03d}",
+        original_boq_name=boq.item_name
     )
 
     db.add(new_mapping)
@@ -520,7 +661,7 @@ def create_work_plan_boq_mapping(
     total_allocated_now = already_allocated + payload.mapped_quantity
     rem_now = max(0.0, boq_qty - total_allocated_now)
 
-    if total_allocated_now >= boq_qty:
+    if abs(total_allocated_now - boq_qty) < 1e-5:
         m_status = "FULLY ALLOCATED"
     elif total_allocated_now > 0:
         m_status = "PARTIALLY MAPPED"
@@ -528,6 +669,8 @@ def create_work_plan_boq_mapping(
         m_status = "MAPPED"
 
     rate = float(boq.rate or 0.0)
+    wbs_task = db.query(WbsTask).filter(WbsTask.id == wp.task_id).first() if wp and wp.task_id else None
+    wbs_node_name = wbs_task.title if wbs_task else (wp.activity_name if wp else "N/A")
 
     return WorkPlanBoqMappingResponse(
         id=new_mapping.id,
@@ -546,7 +689,11 @@ def create_work_plan_boq_mapping(
         remaining_quantity=round(rem_now, 2),
         rate=rate,
         estimated_amount=round(rate * payload.mapped_quantity, 2),
-        mapping_status=m_status
+        mapping_status=m_status,
+        is_orphaned=False,
+        wbs_node_name=wbs_node_name,
+        work_plan_number=wp.work_plan_number,
+        activity_name=wp.activity_name
     )
 
 
@@ -563,7 +710,7 @@ def update_work_plan_boq_mapping(
     if payload.mapped_quantity <= 0:
         raise HTTPException(status_code=400, detail="Mapped quantity must be strictly greater than 0.")
 
-    boq = db.query(BoqItem).filter(BoqItem.id == mapping.boq_item_id).first()
+    boq = db.query(BoqItem).filter(BoqItem.id == mapping.boq_item_id).with_for_update().first()
     if not boq:
         raise HTTPException(status_code=404, detail=f"BOQ Item ID {mapping.boq_item_id} not found.")
 
@@ -572,12 +719,14 @@ def update_work_plan_boq_mapping(
     remaining_qty = max(0.0, boq_qty - already_allocated_others)
 
     if payload.mapped_quantity > remaining_qty + 1e-6:
+        rem_str = f"{remaining_qty:g}"
         raise HTTPException(
             status_code=400,
-            detail=f"Updated quantity ({payload.mapped_quantity:.2f} {mapping.unit}) exceeds available unmapped BOQ quantity ({remaining_qty:.2f} {mapping.unit})."
+            detail=f"Mapped quantity exceeds remaining unmapped quantity. Remaining balance: {rem_str} {mapping.unit}."
         )
 
     mapping.mapped_quantity = payload.mapped_quantity
+    mapping.is_orphaned = False
     mapping.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(mapping)
@@ -586,12 +735,14 @@ def update_work_plan_boq_mapping(
     rem_now = max(0.0, boq_qty - total_allocated_now)
     rate = float(boq.rate or 0.0)
 
-    if total_allocated_now >= boq_qty:
+    if abs(total_allocated_now - boq_qty) < 1e-5:
         m_status = "FULLY ALLOCATED"
     elif total_allocated_now > 0:
         m_status = "PARTIALLY MAPPED"
     else:
         m_status = "MAPPED"
+
+    wp = db.query(WorkPlan).filter(WorkPlan.id == mapping.work_plan_id).first()
 
     return WorkPlanBoqMappingResponse(
         id=mapping.id,
@@ -610,7 +761,11 @@ def update_work_plan_boq_mapping(
         remaining_quantity=round(rem_now, 2),
         rate=rate,
         estimated_amount=round(rate * payload.mapped_quantity, 2),
-        mapping_status=m_status
+        mapping_status=m_status,
+        is_orphaned=False,
+        wbs_node_name=(db.query(WbsTask).filter(WbsTask.id == wp.task_id).first().title if wp and wp.task_id and db.query(WbsTask).filter(WbsTask.id == wp.task_id).first() else (wp.activity_name if wp else "N/A")),
+        work_plan_number=wp.work_plan_number if wp else None,
+        activity_name=wp.activity_name if wp else None
     )
 
 
@@ -620,10 +775,200 @@ def delete_work_plan_boq_mapping(mapping_id: int, db: Session = Depends(get_db))
     if not mapping:
         raise HTTPException(status_code=404, detail=f"BOQ Mapping #{mapping_id} not found.")
 
-    wp_id = mapping.work_plan_id
-    boq_id = mapping.boq_item_id
-
     db.delete(mapping)
     db.commit()
 
     return {"detail": f"BOQ Item mapping #{mapping_id} removed successfully."}
+
+
+@router.post("/boq-mappings/{mapping_id}/remap", response_model=WorkPlanBoqMappingResponse)
+def remap_orphaned_boq_mapping(
+    mapping_id: int,
+    payload: WorkPlanBoqRemapRequest,
+    db: Session = Depends(get_db)
+):
+    mapping = db.query(WorkPlanBoqMapping).filter(WorkPlanBoqMapping.id == mapping_id).first()
+    if not mapping:
+        raise HTTPException(status_code=404, detail=f"BOQ Mapping #{mapping_id} not found.")
+
+    target_boq = db.query(BoqItem).filter(BoqItem.id == payload.target_boq_item_id).with_for_update().first()
+    if not target_boq:
+        raise HTTPException(status_code=404, detail=f"Target BOQ Item #{payload.target_boq_item_id} not found.")
+
+    if target_boq.project_id != mapping.project_id:
+        raise HTTPException(status_code=400, detail="Target BOQ item belongs to a different project.")
+
+    already_allocated = get_boq_total_allocated_qty(target_boq.id, db, exclude_mapping_id=mapping.id)
+    target_boq_qty = float(target_boq.approved_qty or 0.0)
+    remaining_qty = max(0.0, target_boq_qty - already_allocated)
+
+    if float(mapping.mapped_quantity) > remaining_qty + 1e-6:
+        rem_str = f"{remaining_qty:g}"
+        raise HTTPException(
+            status_code=400,
+            detail=f"Mapped quantity exceeds remaining unmapped quantity. Remaining balance: {rem_str} {target_boq.unit}."
+        )
+
+    mapping.boq_item_id = target_boq.id
+    mapping.unit = target_boq.unit
+    mapping.is_orphaned = False
+    mapping.orphaned_reason = None
+    mapping.original_boq_code = f"BOQ-{target_boq.id:03d}"
+    mapping.original_boq_name = target_boq.item_name
+    mapping.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(mapping)
+
+    total_allocated_now = already_allocated + float(mapping.mapped_quantity)
+    rem_now = max(0.0, target_boq_qty - total_allocated_now)
+    wp = db.query(WorkPlan).filter(WorkPlan.id == mapping.work_plan_id).first()
+
+    return WorkPlanBoqMappingResponse(
+        id=mapping.id,
+        work_plan_id=mapping.work_plan_id,
+        boq_item_id=mapping.boq_item_id,
+        project_id=mapping.project_id,
+        mapped_quantity=float(mapping.mapped_quantity),
+        unit=mapping.unit,
+        created_at=mapping.created_at,
+        updated_at=mapping.updated_at,
+        boq_code=f"BOQ-{target_boq.id:03d}",
+        boq_description=target_boq.item_name,
+        boq_unit=target_boq.unit,
+        boq_total_quantity=target_boq_qty,
+        total_allocated_quantity=round(total_allocated_now, 2),
+        remaining_quantity=round(rem_now, 2),
+        rate=float(target_boq.rate or 0.0),
+        estimated_amount=round(float(target_boq.rate or 0.0) * float(mapping.mapped_quantity), 2),
+        mapping_status="FULLY ALLOCATED" if abs(total_allocated_now - target_boq_qty) < 1e-5 else "PARTIALLY MAPPED",
+        is_orphaned=False,
+        wbs_node_name=wp.activity_name if wp else "N/A"
+    )
+
+
+@router.get("/project/{project_id}/publish-readiness", response_model=WorkPlanPublishReadinessResponse)
+def check_work_plan_publish_readiness(project_id: int, db: Session = Depends(get_db)):
+    proj = db.query(Project).filter(Project.id == project_id).first()
+    if not proj:
+        raise HTTPException(status_code=404, detail=f"Project #{project_id} not found.")
+
+    boq_items = db.query(BoqItem).filter(BoqItem.project_id == project_id).all()
+    all_mappings = db.query(WorkPlanBoqMapping).filter(WorkPlanBoqMapping.project_id == project_id).all()
+
+    total_boq = len(boq_items)
+    fully_mapped = 0
+    partially_mapped = 0
+    unmapped = 0
+    orphaned_count = 0
+
+    unmapped_partial_list = []
+    orphaned_list = []
+    blocking_reasons = []
+
+    # 1. Check orphaned mappings
+    boq_id_set = {b.id for b in boq_items}
+    for m in all_mappings:
+        is_orph = getattr(m, 'is_orphaned', False) or (m.boq_item_id not in boq_id_set)
+        if is_orph:
+            orphaned_count += 1
+            wp = db.query(WorkPlan).filter(WorkPlan.id == m.work_plan_id).first()
+            orphaned_list.append(OrphanedMappingSummary(
+                mapping_id=m.id,
+                work_plan_id=m.work_plan_id,
+                wbs_node_name=wp.activity_name if wp else f"Activity #{m.work_plan_id}",
+                mapped_quantity=float(m.mapped_quantity),
+                unit=m.unit,
+                original_boq_code=m.original_boq_code,
+                original_boq_name=m.original_boq_name,
+                orphaned_reason=m.orphaned_reason or "BOQ item no longer exists in current Detailed Estimate."
+            ))
+
+    # 2. Check BOQ Items mapping completeness
+    for boq in boq_items:
+        boq_qty = float(boq.approved_qty or 0.0)
+        total_mapped = sum(float(m.mapped_quantity) for m in all_mappings if m.boq_item_id == boq.id and not getattr(m, 'is_orphaned', False))
+        rem_qty = max(0.0, boq_qty - total_mapped)
+
+        boq_code = f"BOQ-{boq.id:03d}"
+
+        if abs(total_mapped - boq_qty) < 1e-5 and boq_qty > 0:
+            fully_mapped += 1
+        elif total_mapped > 0:
+            partially_mapped += 1
+            unmapped_partial_list.append(UnmappedBoqItemSummary(
+                boq_item_id=boq.id,
+                boq_code=boq_code,
+                description=boq.item_name,
+                unit=boq.unit,
+                boq_quantity=boq_qty,
+                mapped_quantity=round(total_mapped, 2),
+                remaining_quantity=round(rem_qty, 2),
+                status="PARTIALLY_MAPPED"
+            ))
+        else:
+            unmapped += 1
+            unmapped_partial_list.append(UnmappedBoqItemSummary(
+                boq_item_id=boq.id,
+                boq_code=boq_code,
+                description=boq.item_name,
+                unit=boq.unit,
+                boq_quantity=boq_qty,
+                mapped_quantity=0.0,
+                remaining_quantity=round(boq_qty, 2),
+                status="UNMAPPED"
+            ))
+
+    if total_boq == 0:
+        blocking_reasons.append("No BOQ items found for this project.")
+    if unmapped > 0 or partially_mapped > 0:
+        blocking_reasons.append(f"Cannot publish Work Plan. The following BOQ items are not fully mapped ({unmapped + partially_mapped} item(s)).")
+    if orphaned_count > 0:
+        blocking_reasons.append("Orphaned BOQ mappings require remapping before this Work Plan can be published.")
+
+    can_publish = (total_boq > 0) and (unmapped == 0) and (partially_mapped == 0) and (orphaned_count == 0)
+
+    return WorkPlanPublishReadinessResponse(
+        project_id=project_id,
+        total_boq_items=total_boq,
+        fully_mapped_count=fully_mapped,
+        partially_mapped_count=partially_mapped,
+        unmapped_count=unmapped,
+        orphaned_count=orphaned_count,
+        can_publish=can_publish,
+        blocking_reasons=blocking_reasons,
+        unmapped_or_partial_items=unmapped_partial_list,
+        orphaned_mappings=orphaned_list
+    )
+
+
+@router.post("/project/{project_id}/publish")
+def publish_work_plan(project_id: int, db: Session = Depends(get_db)):
+    proj = db.query(Project).filter(Project.id == project_id).first()
+    if not proj:
+        raise HTTPException(status_code=404, detail=f"Project #{project_id} not found.")
+
+    readiness = check_work_plan_publish_readiness(project_id, db)
+    if not readiness.can_publish:
+        err_msg = readiness.blocking_reasons[0] if readiness.blocking_reasons else "Cannot publish Work Plan. BOQ items are not 100% mapped."
+        raise HTTPException(status_code=400, detail=err_msg)
+
+    work_plans = db.query(WorkPlan).filter(WorkPlan.project_id == project_id).all()
+    for wp in work_plans:
+        if wp.status == "NOT STARTED":
+            wp.status = "PUBLISHED"
+        wp.updated_at = datetime.utcnow()
+
+    # Also mark WBS tasks as published
+    wbs_tasks = db.query(WbsTask).filter(WbsTask.project_id == project_id).all()
+    for t in wbs_tasks:
+        t.is_published = True
+
+    db.commit()
+
+    return {
+        "message": f"Work Plan for project #{project_id} published successfully.",
+        "published_work_plan_count": len(work_plans),
+        "published_wbs_node_count": len(wbs_tasks)
+    }
+

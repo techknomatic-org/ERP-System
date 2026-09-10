@@ -31,7 +31,8 @@ from app.api import (
     projects, wbs, site_logs,
     vendors, boq_mb, contractor_billing,
     hse, quality, facility, tally, ai_analytics,
-    schedule_of_rates, estimation, contractor_awards, work_orders, work_plans, task_assignments, project_teams, non_sor, technical_sanctions
+    schedule_of_rates, estimation, contractor_awards, work_orders, work_plans, task_assignments, project_teams, non_sor, technical_sanctions,
+    milestones, hindrances, mobile
 )
 
 
@@ -124,6 +125,16 @@ app.include_router(project_teams.router)
 
 # Technical Sanction Router (PSC-07)
 app.include_router(technical_sanctions.router)
+
+# Milestone Definition Router (WPT-03)
+app.include_router(milestones.router)
+
+# Hindrance Logging & EE Decision Router (EXA-06)
+app.include_router(hindrances.router)
+
+# Mobile App Router (INT-05)
+app.include_router(mobile.router)
+
 
 
 @app.get("/")

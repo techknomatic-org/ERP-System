@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { HardHat, Plus, Camera, Upload, CheckCircle2, Clock, AlertCircle, ArrowLeft, Layers, CheckSquare, X, Image as ImageIcon, Trash2, Filter, Eye, User, Calendar, Tag, Activity, CalendarDays, AlertTriangle } from 'lucide-react';
 import { projectService, siteLogService, boqMbService, authService, workPlanService } from '../services/api';
 
@@ -13,10 +13,21 @@ const getImageUrl = (filePath) => {
 export default function SiteLogs() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const urlProjectId = searchParams.get('projectId');
+  const urlTab = searchParams.get('tab');
 
   // Sub-tab Navigation: 'logs' | 'gallery'
-  const [activeTab, setActiveTab] = useState('logs');
+  const initialTab = (location.pathname === '/photo-gallery' || urlTab === 'gallery') ? 'gallery' : 'logs';
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    if (location.pathname === '/photo-gallery' || urlTab === 'gallery') {
+      setActiveTab('gallery');
+    } else if (urlTab === 'logs') {
+      setActiveTab('logs');
+    }
+  }, [location.pathname, urlTab]);
 
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);

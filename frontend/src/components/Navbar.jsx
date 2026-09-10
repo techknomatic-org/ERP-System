@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Bell, User, ChevronDown, LogOut, HardHat, Package, FileText, Layers, X } from 'lucide-react';
+import { Search, Bell, User, ChevronDown, LogOut, HardHat, Package, FileText, Layers, X, Smartphone, Menu, ChevronRight } from 'lucide-react';
 import { systemService, notificationService } from '../services/api';
+import { PROJECT_FLOW_PHASES } from '../config/navigation';
+import { ROLE_PERMITTED_ROUTES as ROLE_PERMITTED_PATHS } from '../config/roles';
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -11,6 +13,34 @@ export default function Navbar() {
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [activeRole, setActiveRole] = useState(localStorage.getItem('erp_role') || 'admin');
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [showMobileDrawer, setShowMobileDrawer] = useState(false);
+  const [drawerOpenPhases, setDrawerOpenPhases] = useState({
+    'phase-1': true,
+    'phase-2': true,
+    'phase-3': true,
+    'phase-4': true,
+    'phase-5': true,
+    'other-admin': false
+  });
+
+  const toggleDrawerPhase = (key) => {
+    setDrawerOpenPhases(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const roleLower = (activeRole || 'admin').toLowerCase();
+  const allowed = ROLE_PERMITTED_PATHS[roleLower] || ["*"];
+
+  const isPathAllowed = (path) => {
+    if (allowed.includes("*")) return true;
+    if (path === '/mobile') return true;
+    if (path === '/technical-sanction' && allowed.includes('/estimation')) return true;
+    if (path === '/test-check' && allowed.includes('/boq-mb')) return true;
+    if (path === '/photo-gallery' && allowed.includes('/site-logs')) return true;
+    if (path === '/contractor-billing' && (allowed.includes('/contractor-billing') || allowed.includes('/physical-financial-progress'))) return true;
+    if (path === '/physical-financial-progress' && (allowed.includes('/contractor-billing') || allowed.includes('/physical-financial-progress'))) return true;
+    const basePath = path.split('?')[0];
+    return allowed.some(a => path === a || basePath === a || path.startsWith(a));
+  };
 
   // Global Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -84,7 +114,28 @@ export default function Navbar() {
   ] : [];
 
   return (
-    <header className="navbar">
+    <header className="navbar" style={{ position: 'relative' }}>
+      {/* Mobile Drawer Hamburger Trigger */}
+      <button
+        type="button"
+        onClick={() => setShowMobileDrawer(true)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '7px',
+          borderRadius: '8px',
+          background: 'rgba(255,255,255,0.06)',
+          border: '1px solid var(--border-color)',
+          color: '#e2e8f0',
+          cursor: 'pointer',
+          marginRight: '0.75rem'
+        }}
+        title="Open 5-Phase Business Navigation Menu"
+      >
+        <Menu size={17} />
+      </button>
+
       {/* Global Search */}
       <div className="search-box" ref={searchRef} style={{ position: 'relative' }}>
         <Search size={16} color="var(--text-muted)" />
@@ -160,6 +211,29 @@ export default function Navbar() {
           <span className="badge-dot"></span>
           <span>{dbStatus === 'connected' ? 'MySQL Connected' : 'Database Standby'}</span>
         </div>
+
+        {/* Mobile View Switcher */}
+        <button
+          type="button"
+          onClick={() => navigate('/mobile')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 12px',
+            borderRadius: '8px',
+            backgroundColor: 'rgba(99, 102, 241, 0.12)',
+            color: '#818cf8',
+            border: '1px solid rgba(99, 102, 241, 0.3)',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer'
+          }}
+          title="Open Mobile Field App"
+        >
+          <Smartphone size={15} />
+          <span>Mobile App</span>
+        </button>
 
         {/* Notifications Dropdown */}
         <div style={{ position: 'relative' }}>
@@ -311,6 +385,142 @@ export default function Navbar() {
           )}
         </div>
       </div>
+
+      {/* 5-Phase Mobile Navigation Drawer */}
+      {showMobileDrawer && (
+        <div 
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 999999,
+            display: 'flex'
+          }}
+          onClick={() => setShowMobileDrawer(false)}
+        >
+          <div 
+            style={{
+              width: '300px',
+              maxWidth: '85vw',
+              height: '100%',
+              backgroundColor: '#080e1e',
+              borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 0 40px rgba(0,0,0,0.9)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Drawer Header */}
+            <div style={{
+              padding: '1rem',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#fff', letterSpacing: '-0.02em' }}>Project Flow</div>
+                <div style={{ fontSize: '0.68rem', color: '#06b6d4', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  5 Business Phases
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMobileDrawer(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: '4px'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Phases List */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem' }}>
+              {PROJECT_FLOW_PHASES.map((phase) => {
+                const validItems = phase.items.filter(item => isPathAllowed(item.path));
+                if (validItems.length === 0) return null;
+
+                const isOpen = drawerOpenPhases[phase.key] !== false;
+                const PhaseIcon = phase.icon;
+
+                return (
+                  <div key={phase.key} style={{ marginBottom: '0.75rem' }}>
+                    <div
+                      onClick={() => toggleDrawerPhase(phase.key)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.45rem 0.6rem',
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        color: '#f8fafc'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {PhaseIcon && <PhaseIcon size={16} color="#818cf8" />}
+                        <span>{phase.title}</span>
+                      </div>
+                      {isOpen ? <ChevronDown size={14} color="#64748b" /> : <ChevronRight size={14} color="#64748b" />}
+                    </div>
+
+                    {isOpen && (
+                      <div style={{ paddingLeft: '0.5rem', marginTop: '0.25rem' }}>
+                        {validItems.map((item) => {
+                          const Icon = item.icon;
+                          return (
+                            <div
+                              key={item.path + item.label}
+                              onClick={() => {
+                                navigate(item.path);
+                                setShowMobileDrawer(false);
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '0.45rem 0.65rem',
+                                color: '#94a3b8',
+                                fontSize: '0.82rem',
+                                cursor: 'pointer',
+                                borderRadius: '6px',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.color = '#fff';
+                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.color = '#94a3b8';
+                                e.currentTarget.style.background = 'transparent';
+                              }}
+                            >
+                              <Icon size={15} style={{ flexShrink: 0 }} />
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {item.label}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

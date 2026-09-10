@@ -440,6 +440,14 @@ def create_wbs_task(task_in: WbsTaskCreate, db: Session = Depends(get_db)):
     db.refresh(task)
     return task
 
+@router.get("/tasks/{task_id}", response_model=WbsTaskResponse)
+def get_wbs_task(task_id: int, db: Session = Depends(get_db)):
+    task = db.query(WbsTask).filter(WbsTask.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="WBS Task not found")
+    return task
+
+
 @router.put("/tasks/{task_id}", response_model=WbsTaskResponse)
 def update_wbs_task(task_id: int, task_in: WbsTaskUpdate, db: Session = Depends(get_db)):
     task = db.query(WbsTask).filter(WbsTask.id == task_id).first()

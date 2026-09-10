@@ -388,6 +388,8 @@ class TenantSettingResponse(BaseModel):
     tenant_name: str
     is_p2_enabled: bool
     is_funding_mode_enabled: bool
+    ae_sampling_rate: float = 50.00
+    ee_sampling_rate: float = 10.00
     updated_at: datetime
 
     class Config:
@@ -396,6 +398,8 @@ class TenantSettingResponse(BaseModel):
 class TenantSettingUpdate(BaseModel):
     is_p2_enabled: Optional[bool] = None
     is_funding_mode_enabled: Optional[bool] = None
+    ae_sampling_rate: Optional[float] = None
+    ee_sampling_rate: Optional[float] = None
 
 class ProjectBase(BaseModel):
     name: str
@@ -1658,6 +1662,8 @@ class WorkPlanBoqMappingBase(BaseModel):
     boq_item_id: int
     mapped_quantity: float = Field(..., gt=0.0)
     unit: Optional[str] = None
+    work_plan_id: Optional[int] = None
+    wbs_node_id: Optional[int] = None
 
 class WorkPlanBoqMappingCreate(WorkPlanBoqMappingBase):
     pass
@@ -1685,8 +1691,52 @@ class WorkPlanBoqMappingResponse(BaseModel):
     estimated_amount: float = 0.0
     mapping_status: str = "PARTIALLY MAPPED"
 
+    is_orphaned: bool = False
+    orphaned_reason: Optional[str] = None
+    original_boq_code: Optional[str] = None
+    original_boq_name: Optional[str] = None
+    de_revision_number: int = 0
+    wbs_node_name: Optional[str] = None
+    work_plan_number: Optional[str] = None
+    activity_name: Optional[str] = None
+
     class Config:
         from_attributes = True
+
+class WorkPlanBoqRemapRequest(BaseModel):
+    target_boq_item_id: int
+
+class UnmappedBoqItemSummary(BaseModel):
+    boq_item_id: int
+    boq_code: str
+    description: str
+    unit: str
+    boq_quantity: float
+    mapped_quantity: float
+    remaining_quantity: float
+    status: str # "UNMAPPED" or "PARTIALLY_MAPPED"
+
+class OrphanedMappingSummary(BaseModel):
+    mapping_id: int
+    work_plan_id: int
+    wbs_node_name: str
+    mapped_quantity: float
+    unit: str
+    original_boq_code: Optional[str] = None
+    original_boq_name: Optional[str] = None
+    orphaned_reason: str
+
+class WorkPlanPublishReadinessResponse(BaseModel):
+    project_id: int
+    total_boq_items: int = 0
+    fully_mapped_count: int = 0
+    partially_mapped_count: int = 0
+    unmapped_count: int = 0
+    orphaned_count: int = 0
+    can_publish: bool = False
+    blocking_reasons: List[str] = []
+    unmapped_or_partial_items: List[UnmappedBoqItemSummary] = []
+    orphaned_mappings: List[OrphanedMappingSummary] = []
 
 class EligibleBoqItemForMappingResponse(BaseModel):
     boq_item_id: int
@@ -1798,6 +1848,8 @@ class ProjectTeamMemberBase(BaseModel):
     department: Optional[str] = None
     responsibility: Optional[str] = None
     joining_date: Optional[date] = None
+    effective_from: Optional[date] = None
+    effective_to: Optional[date] = None
     remarks: Optional[str] = None
 
 class ProjectTeamMemberCreate(ProjectTeamMemberBase):
@@ -1808,6 +1860,8 @@ class ProjectTeamMemberUpdate(BaseModel):
     department: Optional[str] = None
     responsibility: Optional[str] = None
     joining_date: Optional[date] = None
+    effective_from: Optional[date] = None
+    effective_to: Optional[date] = None
     status: Optional[str] = None
     remarks: Optional[str] = None
 
@@ -1827,6 +1881,7 @@ class ProjectTeamMemberResponse(ProjectTeamMemberBase):
     id: int
     status: str
     is_active: bool
+    access_status: Optional[str] = "ACTIVE"
     created_by_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
@@ -1837,6 +1892,47 @@ class ProjectTeamMemberResponse(ProjectTeamMemberBase):
     project_name: Optional[str] = None
     project_code: Optional[str] = None
     task_assignment_count: int = 0
+
+
+class PendingApprovalItem(BaseModel):
+    request_id: int
+    title: str
+    request_type: Optional[str] = None
+    request_category: Optional[str] = None
+    project_id: Optional[int] = None
+    project_name: Optional[str] = None
+    current_stage: Optional[str] = None
+    status: Optional[str] = None
+    submission_date: Optional[str] = None
+
+
+class ReassignApprovalRequest(BaseModel):
+    project_id: int
+    from_user_id: int
+    to_user_id: int
+    remarks: Optional[str] = None
+
+
+class ProjectTeamInvitationCreate(BaseModel):
+    project_id: int
+    email: str
+    project_role: str
+    effective_from: Optional[date] = None
+    effective_to: Optional[date] = None
+
+
+class ProjectTeamInvitationResponse(BaseModel):
+    id: int
+    project_id: int
+    email: str
+    project_role: str
+    effective_from: date
+    effective_to: Optional[date] = None
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
     assigned_tasks: List[TaskAssignmentResponse] = []
     audits: List[ProjectTeamAuditResponse] = []
 
@@ -1959,3 +2055,385 @@ class TechnicalSanctionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- MILESTONE SCHEMAS (WPT-03) ---
+
+class MilestoneBase(BaseModel):
+    milestone_name: str
+    project_id: int
+    wbs_node_id: int
+    is_date_based: bool = False
+    is_quantity_based: bool = False
+    target_date: Optional[date] = None
+    target_quantity: Optional[float] = None
+
+class MilestoneCreate(MilestoneBase):
+    pass
+
+class MilestoneUpdate(BaseModel):
+    milestone_name: Optional[str] = None
+    wbs_node_id: Optional[int] = None
+    is_date_based: Optional[bool] = None
+    is_quantity_based: Optional[bool] = None
+    target_date: Optional[date] = None
+    target_quantity: Optional[float] = None
+
+class MilestoneResponse(MilestoneBase):
+    id: int
+    status: str
+    wbs_node_name: Optional[str] = None
+    wbs_code: Optional[str] = None
+    project_name: Optional[str] = None
+    is_date_met: bool = False
+    is_quantity_met: bool = False
+    current_actual_qty: float = 0.0
+    current_progress_pct: float = 0.0
+    total_mapped_boq_qty: float = 0.0
+    has_quantity_warning: bool = False
+    quantity_warning_message: Optional[str] = None
+    created_by_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class WbsNodeBoqSummaryResponse(BaseModel):
+    wbs_node_id: int
+    wbs_node_name: str
+    wbs_code: Optional[str] = None
+    total_mapped_boq_qty: float
+    planned_qty: float
+    actual_qty: float
+    progress_pct: float
+    unit: Optional[str] = "m³"
+
+
+# --- EXA-02 DIGITAL e-MEASUREMENT BOOK (e-MB) SCHEMAS ---
+
+class EmbEntryBase(BaseModel):
+    project_id: int
+    wbs_node_id: int
+    boq_item_id: Optional[int] = None
+    description: str
+    measurement_method: str = "LBH"  # "LBH" or "DIRECT"
+    length: Optional[float] = None
+    breadth: Optional[float] = None
+    height: Optional[float] = None
+    direct_quantity: Optional[float] = None
+    unit: Optional[str] = "m³"
+    location_zone: Optional[str] = None
+    remarks: Optional[str] = None
+    photo_url: Optional[str] = None
+    photo_metadata: Optional[str] = None
+    client_uuid: Optional[str] = None
+
+class EmbEntryCreate(EmbEntryBase):
+    pass
+
+class EmbEntryUpdate(BaseModel):
+    description: Optional[str] = None
+    measurement_method: Optional[str] = None
+    length: Optional[float] = None
+    breadth: Optional[float] = None
+    height: Optional[float] = None
+    direct_quantity: Optional[float] = None
+    unit: Optional[str] = None
+    remarks: Optional[str] = None
+    photo_url: Optional[str] = None
+    photo_metadata: Optional[str] = None
+
+class EmbSignatureRequest(BaseModel):
+    signer_id: Optional[int] = None
+    signature_text: Optional[str] = None
+    signature_token: Optional[str] = None
+
+class EmbCorrectionCreate(BaseModel):
+    original_entry_id: int
+    correction_reason: str
+    description: str
+    measurement_method: str = "LBH"
+    length: Optional[float] = None
+    breadth: Optional[float] = None
+    height: Optional[float] = None
+    direct_quantity: Optional[float] = None
+    unit: Optional[str] = "m³"
+    location_zone: Optional[str] = None
+    remarks: Optional[str] = None
+    photo_url: Optional[str] = None
+    photo_metadata: Optional[str] = None
+    client_uuid: Optional[str] = None
+
+class EmbSyncItem(BaseModel):
+    client_uuid: str
+    project_id: int
+    wbs_node_id: int
+    boq_item_id: Optional[int] = None
+    description: str
+    measurement_method: str = "LBH"
+    length: Optional[float] = None
+    breadth: Optional[float] = None
+    height: Optional[float] = None
+    direct_quantity: Optional[float] = None
+    unit: Optional[str] = "m³"
+    location_zone: Optional[str] = None
+    remarks: Optional[str] = None
+    photo_url: Optional[str] = None
+    photo_metadata: Optional[str] = None
+    contractor_rep_signer_id: Optional[int] = None
+    contractor_rep_signature_reference: Optional[str] = None
+    je_signer_id: Optional[int] = None
+    je_signature_reference: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+class EmbSyncRequest(BaseModel):
+    items: List[EmbSyncItem]
+
+class EmbEntryResponse(BaseModel):
+    id: int
+    client_uuid: Optional[str] = None
+    project_id: int
+    project_name: Optional[str] = None
+    wbs_node_id: Optional[int] = None
+    wbs_node_name: Optional[str] = None
+    wbs_code: Optional[str] = None
+    boq_item_id: Optional[int] = None
+    boq_item_name: Optional[str] = None
+    description: Optional[str] = None
+    measurement_method: str
+    length: Optional[float] = None
+    breadth: Optional[float] = None
+    height: Optional[float] = None
+    direct_quantity: Optional[float] = None
+    computed_quantity: float
+    measured_qty: float
+    unit: Optional[str] = None
+    location_zone: Optional[str] = None
+    remarks: Optional[str] = None
+    status: str
+    photo_url: Optional[str] = None
+    photo_metadata: Optional[str] = None
+    contractor_rep_signer_id: Optional[int] = None
+    contractor_rep_name: Optional[str] = None
+    contractor_rep_signed_at: Optional[datetime] = None
+    contractor_rep_signature_reference: Optional[str] = None
+    has_contractor_rep_signed: bool = False
+    je_signer_id: Optional[int] = None
+    je_name: Optional[str] = None
+    je_signed_at: Optional[datetime] = None
+    je_signature_reference: Optional[str] = None
+    has_je_signed: bool = False
+    is_billable: bool = False
+    is_stale: bool = False
+    age_hours: float = 0.0
+    correction_of_id: Optional[int] = None
+    correction_reason: Optional[str] = None
+    is_superseded: bool = False
+    is_offline_sync: bool = False
+    synced_at: Optional[datetime] = None
+    created_by_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    ae_test_check_status: str = "Not Selected"
+    ee_test_check_status: str = "Not Selected"
+    overall_test_check_status: str = "No Test-Check Required"
+
+    class Config:
+        from_attributes = True
+
+class EmbStaleEntryResponse(BaseModel):
+    entry_id: int
+    project_id: int
+    project_name: Optional[str] = None
+    wbs_node_id: Optional[int] = None
+    wbs_node_name: Optional[str] = None
+    wbs_code: Optional[str] = None
+    description: str
+    quantity: float
+    unit: str
+    existing_signature: str
+    missing_signature: str
+    created_at: datetime
+    age_hours: float
+    age_days: float
+
+# EXA-03 Test-Check Schemas
+class TestCheckReviewRequest(BaseModel):
+    action: str  # "Pass" or "Flag"
+    remarks: Optional[str] = None
+
+class TestCheckAssignmentResponse(BaseModel):
+    id: int
+    measurement_book_id: int
+    mb_reference: str
+    project_id: int
+    project_name: Optional[str] = None
+    wbs_node_name: Optional[str] = None
+    description: Optional[str] = None
+    quantity: float
+    unit: str
+    authority: str # "AE" or "EE"
+    sampling_percentage: float
+    risk_score: float
+    risk_factors: Optional[str] = None
+    sampling_reason: Optional[str] = None
+    status: str # "Pending", "Passed", "Flagged"
+    reviewer_id: Optional[int] = None
+    reviewer_name: Optional[str] = None
+    reviewer_remarks: Optional[str] = None
+    selected_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class TestCheckSummaryResponse(BaseModel):
+    project_id: int
+    ae_sampling_rate: float
+    ee_sampling_rate: float
+    ae_pending: int
+    ae_passed: int
+    ae_flagged: int
+    ee_pending: int
+    ee_passed: int
+    ee_flagged: int
+    total_assignments: int
+
+class SamplingConfigResponse(BaseModel):
+    tenant_name: str
+    ae_sampling_rate: float
+    ee_sampling_rate: float
+    min_ae_sampling_rate: float = 50.0
+    min_ee_sampling_rate: float = 10.0
+
+class SamplingConfigUpdate(BaseModel):
+    ae_sampling_rate: float
+    ee_sampling_rate: float
+
+
+# --- EXA-06 Hindrance Logging & EE Decision Schemas ---
+
+class HindranceCreate(BaseModel):
+    project_id: int
+    wbs_node_id: int
+    hindrance_type: str
+    date_occurred: date
+    delay_start_date: Optional[date] = None
+    delay_end_date: Optional[date] = None
+    description: str
+    evidence_document_id: Optional[int] = None
+    evidence_file_name: Optional[str] = None
+    evidence_file_type: Optional[str] = None
+    evidence_file_size: Optional[int] = None
+
+class HindranceDecisionRequest(BaseModel):
+    ee_decision: str # "Accepted", "Rejected", "Info Requested"
+    ee_remarks: Optional[str] = None
+
+class HindranceReopenRequest(BaseModel):
+    description: Optional[str] = None
+    evidence_document_id: Optional[int] = None
+    evidence_file_name: Optional[str] = None
+    evidence_file_type: Optional[str] = None
+    evidence_file_size: Optional[int] = None
+
+class HindranceAuditResponse(BaseModel):
+    id: int
+    hindrance_id: int
+    action: str
+    actor_id: Optional[int] = None
+    actor_name: Optional[str] = None
+    actor_role: Optional[str] = None
+    old_status: Optional[str] = None
+    new_status: Optional[str] = None
+    remarks: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class HindranceResponse(BaseModel):
+    id: int
+    project_id: int
+    project_name: Optional[str] = None
+    wbs_node_id: int
+    wbs_node_name: Optional[str] = None
+    hindrance_type: str
+    date_occurred: date
+    delay_start_date: Optional[date] = None
+    delay_end_date: Optional[date] = None
+    description: str
+    evidence_document_id: Optional[int] = None
+    evidence_file_name: Optional[str] = None
+    evidence_file_type: Optional[str] = None
+    evidence_file_size: Optional[int] = None
+    raised_by_id: int
+    raised_by_name: Optional[str] = None
+    raised_at: datetime
+    current_status: str
+    sla_due_at: datetime
+    day2_reminder_sent: bool
+    day3_reminder_sent: bool
+    sla_breached: bool
+    ee_id: Optional[int] = None
+    ee_name: Optional[str] = None
+    ee_decision: Optional[str] = None
+    ee_remarks: Optional[str] = None
+    decided_at: Optional[datetime] = None
+    escalated_to_id: Optional[int] = None
+    escalated_to_name: Optional[str] = None
+    escalated_at: Optional[datetime] = None
+    reopened_count: int
+    created_at: datetime
+    updated_at: datetime
+    audits: Optional[List[HindranceAuditResponse]] = []
+
+    class Config:
+        from_attributes = True
+
+class EotHindranceItem(BaseModel):
+    hindrance_id: int
+    hindrance_type: str
+    wbs_node_id: int
+    wbs_node_name: Optional[str] = None
+    delay_start_date: date
+    delay_end_date: date
+    individual_days: int
+    status: str
+
+class EotUnionInterval(BaseModel):
+    start_date: date
+    end_date: date
+    interval_days: int
+
+class EotBreakdownResponse(BaseModel):
+    project_id: int
+    project_name: Optional[str] = None
+    total_accepted_hindrances: int
+    individual_total_days: int
+    merged_intervals: List[EotUnionInterval]
+    net_eot_delay_days: int
+    overlap_days_saved: int
+    hindrances: List[EotHindranceItem]
+
+class HindranceSyncItem(BaseModel):
+    client_uuid: str
+    project_id: int
+    wbs_node_id: int
+    hindrance_type: str
+    date_occurred: date
+    description: str
+    delay_start_date: Optional[date] = None
+    delay_end_date: Optional[date] = None
+    evidence_file_name: Optional[str] = None
+    evidence_file_type: Optional[str] = None
+    evidence_file_size: Optional[int] = None
+    evidence_base64: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+class HindranceSyncRequest(BaseModel):
+    items: List[HindranceSyncItem]
+
+

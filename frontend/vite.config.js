@@ -11,10 +11,12 @@ export default defineConfig(({ mode }) => {
     : 'http://127.0.0.1:8000';
 
   return {
+    appType: 'spa',
     plugins: [react()],
     server: {
       port: 5173,
-      host: true,
+      host: '0.0.0.0',
+      strictPort: true,
       proxy: {
         '/api': {
           target: proxyTarget,

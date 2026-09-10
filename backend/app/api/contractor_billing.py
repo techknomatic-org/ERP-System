@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
 import uuid
+from datetime import datetime
 from app.database import get_db
-from app.models import ContractorBill, BoqItem, MeasurementBook, Vendor, ApprovalTask, AuditLog, Notification, TechnicalSanction, ProjectEstimate
+from app.models import ContractorBill, BoqItem, MeasurementBook, Vendor, ApprovalTask, AuditLog, Notification, TechnicalSanction, ProjectEstimate, TestCheckAssignment
 from app.schemas import ContractorBillCreate, ContractorBillResponse
 
 router = APIRouter(prefix="/api/contractor-billing", tags=["3-Way Contractor Bill Verification Engine"])
@@ -22,6 +23,29 @@ def submit_contractor_bill(bill_in: ContractorBillCreate, db: Session = Depends(
     vendor = db.query(Vendor).filter(Vendor.id == bill_in.vendor_id).first()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
+
+    # EXA-03 SERVER-SIDE BILLING GATE
+    # Inspect all MeasurementBook entries for this boq_item_id
+    mb_entries = db.query(MeasurementBook).filter(
+        MeasurementBook.boq_item_id == boq.id,
+        MeasurementBook.status.in_(["APPROVED", "FULLY SIGNED / SUBMITTED"])
+    ).all()
+
+    for mb_rec in mb_entries:
+        test_checks = db.query(TestCheckAssignment).filter(
+            TestCheckAssignment.measurement_book_id == mb_rec.id
+        ).all()
+        for tc in test_checks:
+            if tc.status == "Pending":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Bill cannot be raised because e-MB MB-{mb_rec.id:04d} has a pending {tc.authority} Test-Check."
+                )
+            elif tc.status == "Flagged":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Bill cannot be raised because e-MB MB-{mb_rec.id:04d} was flagged during {tc.authority} Test-Check."
+                )
 
     # TECHNICAL SANCTION BILLING GATE (Requirement 14)
     # Any API/service that creates or submits a contractor bill must verify Technical Sanction status = APPROVED
@@ -53,7 +77,11 @@ def submit_contractor_bill(bill_in: ContractorBillCreate, db: Session = Depends(
             )
 
     # 1. Fetch total verified quantity from Measurement Book (MB)
-    mb_total_qty = db.query(func.sum(MeasurementBook.measured_qty)).filter(MeasurementBook.boq_item_id == boq.id).scalar() or 0.0
+    # Only FULLY SIGNED / SUBMITTED (or legacy APPROVED) measurements may contribute to billable MB quantities
+    mb_total_qty = db.query(func.coalesce(func.sum(MeasurementBook.measured_qty), 0.00)).filter(
+        MeasurementBook.boq_item_id == boq.id,
+        MeasurementBook.status.in_(["APPROVED", "FULLY SIGNED / SUBMITTED"])
+    ).scalar() or 0.0
     mb_total_qty = float(mb_total_qty)
     boq_qty = float(boq.approved_qty)
     billed_qty = float(bill_in.billed_qty)

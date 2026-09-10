@@ -1,32 +1,64 @@
-import React, { useEffect, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import React, { useEffect, useState, useMemo } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import { 
-  LayoutDashboard, Package, ShoppingCart, Users, Settings, 
-  CheckSquare, ShieldAlert, Building2, HardHat, FileText, UserCheck, Key, Layers, ClipboardList,
-  Calculator, Truck, FileSpreadsheet, ShieldCheck, AlertOctagon, Sparkles, Wrench,
-  ChevronDown, ChevronRight, ChevronLeft, UserCog, Sliders, Activity, FileBarChart, DollarSign, TrendingUp, Briefcase, Award, FileCheck, Calendar
+  Building2, ChevronDown, ChevronRight, ChevronLeft, FileText,
+  Smartphone
 } from 'lucide-react';
 import { approvalService } from '../services/api';
-
 import { ROLE_PERMITTED_ROUTES as ROLE_PERMITTED_PATHS } from '../config/roles';
+import { PROJECT_FLOW_PHASES, getPhaseKeyForPath } from '../config/navigation';
 
 export default function Sidebar() {
+  const location = useLocation();
   const [pendingCount, setPendingCount] = useState(0);
   const [userRole, setUserRole] = useState(localStorage.getItem('erp_role') || 'admin');
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const [openGroups, setOpenGroups] = useState({
-    admin: true, master: false, ops: true, finance: true, procurement: true, quality: false, analytics: false,
-    pm_projects: true, pm_planning: true, pm_materials: false, pm_approvals: true,
-    se_dashboard: true, se_execution: true, se_materials: false, se_control: true,
-    fin_dashboard: true, fin_receivables: true,
-    proc_dashboard: true, proc_pipeline: true,
-    mgmt_dashboard: true, mgmt_portfolio: true
+  // Initialize open groups: active phase open, others compact
+  const [openGroups, setOpenGroups] = useState(() => {
+    const activeKey = getPhaseKeyForPath(window.location.pathname);
+    return {
+      'phase-1': activeKey === 'phase-1',
+      'phase-2': activeKey === 'phase-2',
+      'phase-3': activeKey === 'phase-3',
+      'phase-4': activeKey === 'phase-4',
+      'phase-5': activeKey === 'phase-5',
+      'other-admin': activeKey === 'other-admin'
+    };
   });
 
+  // Auto-expand the phase that contains the current active route, collapsing others to keep navigation compact
+  useEffect(() => {
+    const activePhaseKey = getPhaseKeyForPath(location.pathname);
+    if (activePhaseKey) {
+      setOpenGroups({
+        'phase-1': activePhaseKey === 'phase-1',
+        'phase-2': activePhaseKey === 'phase-2',
+        'phase-3': activePhaseKey === 'phase-3',
+        'phase-4': activePhaseKey === 'phase-4',
+        'phase-5': activePhaseKey === 'phase-5',
+        'other-admin': activePhaseKey === 'other-admin'
+      });
+    }
+  }, [location.pathname]);
+
+  // Toggle expand/collapse of navigation groups (accordion mode)
   const toggleGroup = (key) => {
-    if (isCollapsed) setIsCollapsed(false);
-    setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
+    if (isCollapsed) {
+      setIsCollapsed(false);
+    }
+    setOpenGroups(prev => {
+      const willOpen = !prev[key];
+      if (!willOpen) {
+        return { ...prev, [key]: false };
+      }
+      // Expand clicked phase, keeping other phases collapsed to keep navigation compact
+      const updated = {};
+      PROJECT_FLOW_PHASES.forEach(p => {
+        updated[p.key] = p.key === key;
+      });
+      return updated;
+    });
   };
 
   useEffect(() => {
@@ -46,240 +78,17 @@ export default function Sidebar() {
 
   const isPathAllowed = (path) => {
     if (allowed.includes("*")) return true;
-    return allowed.some(a => path === a || path.startsWith(a));
+    if (path === '/mobile') return true;
+    if (path === '/technical-sanction' && allowed.includes('/estimation')) return true;
+    if (path === '/test-check' && allowed.includes('/boq-mb')) return true;
+    if (path === '/photo-gallery' && allowed.includes('/site-logs')) return true;
+    if (path === '/contractor-billing' && (allowed.includes('/contractor-billing') || allowed.includes('/physical-financial-progress'))) return true;
+    if (path === '/physical-financial-progress' && (allowed.includes('/contractor-billing') || allowed.includes('/physical-financial-progress'))) return true;
+    const basePath = path.split('?')[0];
+    return allowed.some(a => path === a || basePath === a || path.startsWith(a));
   };
 
-  // 1. SYSTEM ADMIN Nav (System & Security Administration)
-  const adminNavSections = [
-    {
-      key: 'admin',
-      title: 'SYSTEM ADMINISTRATION',
-      items: [
-        { label: 'Admin Overview', icon: LayoutDashboard, path: '/' },
-        { label: 'User Accounts', icon: UserCheck, path: '/users' },
-        { label: 'Roles & Permissions', icon: UserCog, path: '/roles-permissions' },
-        { label: 'Approval Authority', icon: Sliders, path: '/approval-authority' },
-        { label: 'Audit Trail Logs', icon: ShieldAlert, path: '/audit-logs' },
-        { label: 'System Settings', icon: Settings, path: '/settings' },
-      ]
-    },
-    {
-      key: 'master',
-      title: 'MASTER DATA & ASSETS',
-      items: [
-        { label: 'Construction Projects', icon: HardHat, path: '/projects' },
-        { label: 'Properties Master', icon: Building2, path: '/properties' },
-        { label: 'Unit Inventory Master', icon: Key, path: '/units' },
-        { label: 'Customers Directory', icon: Users, path: '/customers' },
-        { label: 'Vendor Directory', icon: Truck, path: '/vendors' },
-      ]
-    },
-    {
-      key: 'ops',
-      title: 'CONSTRUCTION OPERATIONS',
-      items: [
-        { label: 'WBS & Task Tree', icon: Layers, path: '/wbs' },
-        { label: 'Work Plan', icon: Calendar, path: '/work-plan' },
-        { label: 'Task Assignments', icon: UserCheck, path: '/task-assignments' },
-        { label: 'Project Team', icon: Users, path: '/project-team' },
-        { label: 'Daily Site Logs', icon: ClipboardList, path: '/site-logs' },
-        { label: 'BOQ & Measurement Book', icon: FileSpreadsheet, path: '/boq-mb' },
-        { label: 'Schedule of Rates', icon: Calculator, path: '/sor' },
-        { label: 'Non-SOR Rate Analysis', icon: Calculator, path: '/non-sor-rate-analysis' },
-        { label: 'Project Estimation', icon: DollarSign, path: '/estimation' },
-        { label: 'Contractor Awards', icon: Award, path: '/contractor-awards' },
-        { label: 'Work Orders', icon: FileCheck, path: '/work-orders' },
-        { label: 'CRM Leads', icon: UserCheck, path: '/crm-leads' },
-        { label: 'Unit Bookings', icon: Key, path: '/bookings' },
-      ]
-    },
-    {
-      key: 'finance',
-      title: 'FINANCE & PAYMENTS',
-      items: [
-        { label: 'Financial Requests', icon: DollarSign, path: '/financial-requests' },
-        { label: 'Contractor Billing', icon: Calculator, path: '/contractor-billing' },
-        { label: 'Tally Accounting Sync', icon: FileBarChart, path: '/tally' },
-      ]
-    },
-    {
-      key: 'procurement',
-      title: 'PROCUREMENT & INVENTORY',
-      items: [
-        { label: 'Procurement Pipeline', icon: ShoppingCart, path: '/procurement' },
-        { label: 'Material Inventory', icon: Package, path: '/inventory' },
-        { label: 'Vendors Directory', icon: Truck, path: '/vendors' },
-      ]
-    },
-    {
-      key: 'quality',
-      title: 'APPROVALS & COMPLIANCE',
-      items: [
-        { label: 'Approval Workflows', icon: CheckSquare, path: '/approvals', badge: pendingCount > 0 ? pendingCount : null },
-        { label: 'HSE Safety Incidents', icon: ShieldCheck, path: '/hse' },
-        { label: 'Quality Control Inspections', icon: AlertOctagon, path: '/quality' },
-        { label: 'Facility Management', icon: Wrench, path: '/facility' },
-      ]
-    },
-    {
-      key: 'analytics',
-      title: 'EXECUTIVE AI ANALYTICS',
-      items: [
-        { label: 'AI Analytics & OCR', icon: Sparkles, path: '/ai-analytics' },
-      ]
-    }
-  ];
-
-  // 2. EXECUTIVE MANAGEMENT Nav (Portfolio Governance & Profitability)
-  const mgmtNavSections = [
-    {
-      key: 'mgmt_dashboard',
-      title: 'EXECUTIVE PORTFOLIO',
-      items: [
-        { label: 'Executive Portfolio Dashboard', icon: LayoutDashboard, path: '/' },
-        { label: 'Portfolio Construction Projects', icon: HardHat, path: '/projects' },
-        { label: 'WBS Milestones & Schedule', icon: Layers, path: '/wbs' }
-      ]
-    },
-    {
-      key: 'mgmt_portfolio',
-      title: 'GOVERNANCE & ANALYTICS',
-      items: [
-        { label: 'Executive Approvals Queue', icon: CheckSquare, path: '/approvals', badge: pendingCount > 0 ? pendingCount : null },
-        { label: 'Financial Requests Overview', icon: DollarSign, path: '/financial-requests' },
-        { label: 'AI Analytics & Predictive Insights', icon: Sparkles, path: '/ai-analytics' }
-      ]
-    }
-  ];
-
-  // 3. PROJECT MANAGER Nav
-  const pmNavSections = [
-    {
-      key: 'pm_projects',
-      title: 'PROJECT MANAGEMENT',
-      items: [
-        { label: 'PM Dashboard', icon: LayoutDashboard, path: '/' },
-        { label: 'Construction Projects', icon: HardHat, path: '/projects' },
-        { label: 'Project Estimation', icon: DollarSign, path: '/estimation' },
-        { label: 'Non-SOR Rate Analysis', icon: Calculator, path: '/non-sor-rate-analysis' },
-        { label: 'Contractor Awards', icon: Award, path: '/contractor-awards' },
-        { label: 'Work Orders', icon: FileCheck, path: '/work-orders' }
-      ]
-    },
-    {
-      key: 'pm_planning',
-      title: 'PLANNING & EXECUTION',
-      items: [
-        { label: 'WBS & Task Tree', icon: Layers, path: '/wbs' },
-        { label: 'Work Plan', icon: Calendar, path: '/work-plan' },
-        { label: 'Task Assignments', icon: UserCheck, path: '/task-assignments' },
-        { label: 'Project Team', icon: Users, path: '/project-team' },
-        { label: 'Daily Site Logs', icon: ClipboardList, path: '/site-logs' },
-        { label: 'BOQ & Measurement Book', icon: FileSpreadsheet, path: '/boq-mb' },
-        { label: 'Schedule of Rates', icon: Calculator, path: '/sor' },
-        { label: 'Non-SOR Rate Analysis', icon: Calculator, path: '/non-sor-rate-analysis' }
-      ]
-    },
-    {
-      key: 'pm_materials',
-      title: 'RESOURCES & INVENTORY',
-      items: [
-        { label: 'Procurement Pipeline', icon: ShoppingCart, path: '/procurement' },
-        { label: 'Material Inventory', icon: Package, path: '/inventory' },
-        { label: 'Vendor Directory', icon: Truck, path: '/vendors' }
-      ]
-    },
-    {
-      key: 'pm_approvals',
-      title: 'WORKFLOW & FINANCIALS',
-      items: [
-        { label: 'My Pending Approvals', icon: CheckSquare, path: '/approvals', badge: pendingCount > 0 ? pendingCount : null },
-        { label: 'Financial Requests', icon: DollarSign, path: '/financial-requests' },
-        { label: 'Executive Analytics', icon: Sparkles, path: '/ai-analytics' }
-      ]
-    }
-  ];
-
-  // 4. SITE ENGINEER Nav
-  const seNavSections = [
-    {
-      key: 'se_dashboard',
-      title: 'SITE CONTROL',
-      items: [
-        { label: 'Site Engineer Dashboard', icon: LayoutDashboard, path: '/' },
-        { label: 'My Assigned Projects', icon: HardHat, path: '/projects' }
-      ]
-    },
-    {
-      key: 'se_execution',
-      title: 'SITE EXECUTION',
-      items: [
-        { label: 'WBS & Task Hierarchy', icon: Layers, path: '/wbs' },
-        { label: 'Daily Site Progress Log', icon: ClipboardList, path: '/site-logs' },
-        { label: 'BOQ & Measurement Book', icon: FileSpreadsheet, path: '/boq-mb' },
-        { label: 'Schedule of Rates', icon: Calculator, path: '/sor' },
-        { label: 'Non-SOR Rate Analysis', icon: Calculator, path: '/non-sor-rate-analysis' },
-        { label: 'Project Estimation', icon: DollarSign, path: '/estimation' }
-      ]
-    },
-    {
-      key: 'se_materials',
-      title: 'MATERIALS & SAFETY',
-      items: [
-        { label: 'Material Stock & Requests', icon: Package, path: '/inventory' },
-        { label: 'HSE Safety Incidents', icon: AlertOctagon, path: '/hse' },
-        { label: 'Financial Requests', icon: DollarSign, path: '/financial-requests' },
-        { label: 'My Pending Approvals', icon: CheckSquare, path: '/approvals', badge: pendingCount > 0 ? pendingCount : null }
-      ]
-    }
-  ];
-
-  // 5. FINANCE Nav
-  const financeNavSections = [
-    {
-      key: 'fin_dashboard',
-      title: 'FINANCIAL MANAGEMENT',
-      items: [
-        { label: 'Finance Dashboard', icon: LayoutDashboard, path: '/' },
-        { label: 'Financial Requests Queue', icon: DollarSign, path: '/financial-requests' },
-        { label: 'Contractor Bill 3-Way Match', icon: Calculator, path: '/contractor-billing' }
-      ]
-    },
-    {
-      key: 'fin_receivables',
-      title: 'PAYMENTS & ACCOUNTING',
-      items: [
-        { label: 'Approval Tasks Queue', icon: CheckSquare, path: '/approvals', badge: pendingCount > 0 ? pendingCount : null },
-        { label: 'Unit Bookings & Payments', icon: Key, path: '/bookings' },
-        { label: 'AI Invoice OCR & Verification', icon: Sparkles, path: '/ai-analytics' },
-        { label: 'Tally Accounting Sync', icon: FileBarChart, path: '/tally' }
-      ]
-    }
-  ];
-
-  // 6. PROCUREMENT Nav (PR / PO / GRN / Inventory / Vendors)
-  const procurementNavSections = [
-    {
-      key: 'proc_dashboard',
-      title: 'PROCUREMENT HUB',
-      items: [
-        { label: 'Procurement Dashboard', icon: LayoutDashboard, path: '/' },
-        { label: 'Procurement Pipeline (PR/PO/GRN)', icon: ShoppingCart, path: '/procurement' }
-      ]
-    },
-    {
-      key: 'proc_pipeline',
-      title: 'INVENTORY & VENDORS',
-      items: [
-        { label: 'Material Inventory Stock', icon: Package, path: '/inventory' },
-        { label: 'Vendor Directory', icon: Truck, path: '/vendors' },
-        { label: 'BOQ Material Verification', icon: FileSpreadsheet, path: '/boq-mb' },
-        { label: 'Pending Approvals', icon: CheckSquare, path: '/approvals', badge: pendingCount > 0 ? pendingCount : null }
-      ]
-    }
-  ];
-
-  // 7. CUSTOMER PORTAL Sidebar
+  // CUSTOMER PORTAL Sidebar
   if (roleLower === 'customer') {
     return (
       <aside className="sidebar" style={{ width: '260px' }}>
@@ -306,14 +115,17 @@ export default function Sidebar() {
     );
   }
 
-  const activeNavSections = 
-    roleLower === 'management' ? mgmtNavSections :
-    roleLower.includes('finance') ? financeNavSections : 
-    roleLower.includes('procure') ? procurementNavSections :
-    roleLower.includes('site') ? seNavSections : 
-    roleLower.includes('pm') || roleLower.includes('project') ? pmNavSections : adminNavSections;
+  const sidebarWidth = isCollapsed ? '72px' : '264px';
 
-  const sidebarWidth = isCollapsed ? '72px' : '260px';
+  // Phase color accents for enterprise visual polish
+  const PHASE_COLORS = {
+    'phase-1': { badgeBg: 'rgba(56, 189, 248, 0.12)', badgeColor: '#38bdf8', border: '#0284c7' },
+    'phase-2': { badgeBg: 'rgba(245, 158, 11, 0.12)', badgeColor: '#f59e0b', border: '#d97706' },
+    'phase-3': { badgeBg: 'rgba(16, 185, 129, 0.12)', badgeColor: '#10b981', border: '#059669' },
+    'phase-4': { badgeBg: 'rgba(99, 102, 241, 0.12)', badgeColor: '#818cf8', border: '#6366f1' },
+    'phase-5': { badgeBg: 'rgba(168, 85, 247, 0.12)', badgeColor: '#c084fc', border: '#9333ea' },
+    'other-admin': { badgeBg: 'rgba(148, 163, 184, 0.1)', badgeColor: '#94a3b8', border: '#64748b' }
+  };
 
   return (
     <aside
@@ -322,11 +134,16 @@ export default function Sidebar() {
         width: sidebarWidth,
         transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         overflowY: 'auto',
-        position: 'relative'
+        overflowX: 'hidden',
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        background: '#080e1e'
       }}
     >
       {/* Brand Header */}
-      <div className="brand-header" style={{ justifyContent: isCollapsed ? 'center' : 'space-between' }}>
+      <div className="brand-header" style={{ justifyContent: isCollapsed ? 'center' : 'space-between', padding: isCollapsed ? '0' : '0 1.25rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           <div
             className="brand-icon"
@@ -338,14 +155,14 @@ export default function Sidebar() {
           </div>
           {!isCollapsed && (
             <div>
-              <div className="brand-name">Project Flow</div>
+              <div className="brand-name" style={{ letterSpacing: '-0.02em', fontSize: '1.05rem' }}>Project Flow</div>
               <div
                 style={{
-                  fontSize: '0.68rem',
+                  fontSize: '0.66rem',
                   color: '#06b6d4',
                   textTransform: 'uppercase',
                   fontWeight: 700,
-                  letterSpacing: '0.05em'
+                  letterSpacing: '0.06em'
                 }}
               >
                 {roleLower.replace('_', ' ')}
@@ -366,7 +183,8 @@ export default function Sidebar() {
             padding: '0.35rem',
             display: 'flex',
             alignItems: 'center',
-            justify: 'center'
+            justifyContent: 'center',
+            transition: 'background 0.2s ease'
           }}
           title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
         >
@@ -374,63 +192,153 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* Navigation Accordions */}
-      <nav style={{ paddingBottom: '2rem' }}>
-        <ul className="nav-list">
-          {activeNavSections.map(section => {
-            const validItems = section.items.filter(item => isPathAllowed(item.path));
+      {/* 5 Business Phases Navigation */}
+      <nav style={{ paddingBottom: '2.5rem', flex: 1, padding: isCollapsed ? '0.5rem 0' : '0.5rem' }}>
+        <ul className="nav-list" style={{ padding: 0, margin: 0 }}>
+          {PROJECT_FLOW_PHASES.map((phase) => {
+            const validItems = phase.items.filter(item => isPathAllowed(item.path));
             if (validItems.length === 0) return null;
 
-            const isOpen = openGroups[section.key] === true;
+            const isOpen = openGroups[phase.key] === true;
+            const colors = PHASE_COLORS[phase.key] || PHASE_COLORS['other-admin'];
+            const PhaseIcon = phase.icon;
+            const isPhaseActive = validItems.some(item => 
+              location.pathname === item.path || 
+              (item.path !== '/' && location.pathname.startsWith(item.path))
+            );
 
             return (
-              <li key={section.key} style={{ marginTop: isCollapsed ? '0.4rem' : '0.6rem' }}>
+              <li key={phase.key} style={{ marginTop: isCollapsed ? '0.35rem' : '0.5rem', listStyle: 'none' }}>
                 {!isCollapsed ? (
                   <div
-                    onClick={() => toggleGroup(section.key)}
+                    onClick={() => toggleGroup(phase.key)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      justify: 'space-between',
-                      padding: '0.35rem 0.65rem',
-                      fontSize: '0.68rem',
+                      justifyContent: 'space-between',
+                      padding: '0.48rem 0.65rem',
+                      fontSize: '0.8rem',
                       fontWeight: 700,
-                      color: 'var(--text-muted)',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.06em',
+                      color: isPhaseActive ? '#f8fafc' : '#94a3b8',
+                      background: isPhaseActive 
+                        ? 'rgba(255, 255, 255, 0.04)' 
+                        : 'transparent',
+                      borderLeft: isPhaseActive 
+                        ? `3px solid ${colors.border}` 
+                        : '3px solid transparent',
+                      borderRadius: '6px',
                       cursor: 'pointer',
-                      borderRadius: '4px',
-                      userSelect: 'none'
+                      userSelect: 'none',
+                      transition: 'all 0.15s ease'
                     }}
+                    title={phase.description}
                   >
-                    <span>{section.title}</span>
-                    {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', overflow: 'hidden', flex: 1 }}>
+                      {PhaseIcon && (
+                        <PhaseIcon 
+                          size={16} 
+                          style={{ 
+                            color: isPhaseActive ? colors.badgeColor : '#64748b', 
+                            flexShrink: 0 
+                          }} 
+                        />
+                      )}
+                      <span style={{ 
+                        whiteSpace: 'nowrap', 
+                        textOverflow: 'ellipsis', 
+                        overflow: 'hidden',
+                        letterSpacing: '-0.01em',
+                        fontSize: '0.82rem',
+                        fontWeight: isPhaseActive ? 700 : 600,
+                        color: isPhaseActive ? '#f8fafc' : '#cbd5e1'
+                      }}>
+                        {phase.title}
+                      </span>
+                    </div>
+                    <div style={{ color: '#64748b', flexShrink: 0, marginLeft: '0.35rem' }}>
+                      {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </div>
                   </div>
                 ) : (
-                  <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', margin: '0.4rem 0' }} />
+                  <div 
+                    onClick={() => toggleGroup(phase.key)}
+                    style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center', 
+                      margin: '0.35rem 0',
+                      cursor: 'pointer',
+                      padding: '0.4rem',
+                      borderRadius: '6px',
+                      background: isPhaseActive ? colors.badgeBg : 'transparent'
+                    }}
+                    title={phase.title}
+                  >
+                    {PhaseIcon ? (
+                      <PhaseIcon size={18} color={isPhaseActive ? colors.badgeColor : '#94a3b8'} />
+                    ) : (
+                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: colors.badgeColor }} />
+                    )}
+                  </div>
                 )}
 
                 {(isOpen || isCollapsed) && (
-                  <ul style={{ listStyle: 'none', paddingLeft: 0, marginTop: '0.2rem' }}>
-                    {validItems.map(item => {
+                  <ul 
+                    style={{ 
+                      listStyle: 'none', 
+                      paddingLeft: isCollapsed ? 0 : '0.5rem', 
+                      margin: '0.2rem 0 0 0',
+                      borderLeft: (!isCollapsed && isOpen) ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                      marginLeft: isCollapsed ? 0 : '0.75rem'
+                    }}
+                  >
+                    {validItems.map((item) => {
                       const Icon = item.icon;
+                      const badge = item.badgeKey === 'pendingApprovals' && pendingCount > 0 ? pendingCount : null;
+
                       return (
-                        <li key={item.path + item.label}>
+                        <li key={item.path + item.label} style={{ listStyle: 'none' }}>
                           <NavLink
                             to={item.path}
-                            className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                            end={item.path === '/'}
+                            className={({ isActive }) => {
+                              const isAliasActive = 
+                                (item.path === '/contractor-billing' && location.pathname === '/physical-financial-progress') ||
+                                (item.path === '/projects' && location.pathname.startsWith('/projects/'));
+                              return `nav-link ${isActive || isAliasActive ? 'active' : ''}`;
+                            }}
                             style={{
-                              padding: isCollapsed ? '0.6rem 0' : '0.5rem 0.75rem',
-                              justify: isCollapsed ? 'center' : 'flex-start',
-                              fontSize: '0.83rem'
+                              padding: isCollapsed ? '0.55rem 0' : '0.45rem 0.65rem',
+                              justifyContent: isCollapsed ? 'center' : 'flex-start',
+                              fontSize: '0.82rem',
+                              margin: '0.1rem 0',
+                              borderRadius: '6px'
                             }}
                             title={isCollapsed ? item.label : undefined}
                           >
-                            <Icon size={16} />
-                            {!isCollapsed && <span>{item.label}</span>}
-                            {!isCollapsed && item.badge && (
-                              <span className="tag-badge tag-warning" style={{ marginLeft: 'auto', borderRadius: '9999px', fontSize: '0.68rem', padding: '0.1rem 0.4rem' }}>
-                                {item.badge}
+                            <Icon size={16} style={{ flexShrink: 0 }} />
+                            {!isCollapsed && (
+                              <span style={{ 
+                                whiteSpace: 'nowrap', 
+                                overflow: 'hidden', 
+                                textOverflow: 'ellipsis',
+                                flex: 1
+                              }}>
+                                {item.label}
+                              </span>
+                            )}
+                            {!isCollapsed && badge && (
+                              <span 
+                                className="tag-badge tag-warning" 
+                                style={{ 
+                                  marginLeft: 'auto', 
+                                  borderRadius: '9999px', 
+                                  fontSize: '0.66rem', 
+                                  padding: '0.05rem 0.38rem',
+                                  fontWeight: 700 
+                                }}
+                              >
+                                {badge}
                               </span>
                             )}
                           </NavLink>

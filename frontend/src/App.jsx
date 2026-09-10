@@ -23,6 +23,8 @@ import Projects from './pages/Projects';
 import ProjectDetails from './pages/ProjectDetails';
 import WbsGantt from './pages/WbsGantt';
 import WorkPlan from './pages/WorkPlan';
+import Milestones from './pages/Milestones';
+import HindranceManagement from './pages/HindranceManagement';
 import TaskAssignments from './pages/TaskAssignments';
 import ProjectTeam from './pages/ProjectTeam';
 import SiteLogs from './pages/SiteLogs';
@@ -47,6 +49,7 @@ import ApprovalAuthority from './pages/ApprovalAuthority';
 import SessionManagement from './pages/SessionManagement';
 import AuditLogs from './pages/AuditLogs';
 import Settings from './pages/Settings';
+import MobileApp from './pages/MobileApp';
 
 import { ROLE_PERMITTED_ROUTES, ROLE_DEFAULT_ROUTES as ROLE_DEFAULT_DESTINATION } from './config/roles';
 
@@ -76,7 +79,8 @@ function RoleProtectedRouteGuard({ children, path }) {
     !path.startsWith('/crm/leads/') && 
     !path.startsWith('/bookings/') && 
     !path.startsWith('/customers/') &&
-    !path.startsWith('/procurement')
+    !path.startsWith('/procurement') &&
+    !path.startsWith('/mobile')
   ) {
     const dest = ROLE_DEFAULT_DESTINATION[role] || '/';
     return <Navigate to={dest} replace />;
@@ -88,6 +92,7 @@ function RoleProtectedRouteGuard({ children, path }) {
 export default function App() {
   const location = useLocation();
   const isLoginPage = location.pathname === '/login';
+  const isMobilePage = location.pathname.startsWith('/mobile');
 
   if (isLoginPage) {
     return (
@@ -97,10 +102,20 @@ export default function App() {
     );
   }
 
+  if (isMobilePage) {
+    return (
+      <Routes>
+        <Route path="/mobile" element={<MobileApp />} />
+        <Route path="/mobile/*" element={<MobileApp />} />
+      </Routes>
+    );
+  }
+
   return (
     <div className="app-container">
       <Sidebar />
       <div className="main-content">
+
         <Navbar />
         <Routes>
           <Route path="/" element={<RoleProtectedRouteGuard path="/"><Dashboard /></RoleProtectedRouteGuard>} />
@@ -111,10 +126,14 @@ export default function App() {
           <Route path="/hse" element={<RoleProtectedRouteGuard path="/hse"><HseIncidents /></RoleProtectedRouteGuard>} />
           <Route path="/quality" element={<RoleProtectedRouteGuard path="/quality"><QualityControl /></RoleProtectedRouteGuard>} />
           <Route path="/contractor-billing" element={<RoleProtectedRouteGuard path="/contractor-billing"><ContractorBilling /></RoleProtectedRouteGuard>} />
+          <Route path="/physical-financial-progress" element={<RoleProtectedRouteGuard path="/contractor-billing"><ContractorBilling /></RoleProtectedRouteGuard>} />
           <Route path="/boq-mb" element={<RoleProtectedRouteGuard path="/boq-mb"><BoqMb /></RoleProtectedRouteGuard>} />
           <Route path="/sor" element={<RoleProtectedRouteGuard path="/sor"><ScheduleOfRates /></RoleProtectedRouteGuard>} />
           <Route path="/non-sor-rate-analysis" element={<RoleProtectedRouteGuard path="/non-sor-rate-analysis"><NonSorRateAnalysis /></RoleProtectedRouteGuard>} />
           <Route path="/estimation" element={<RoleProtectedRouteGuard path="/estimation"><ProjectEstimation /></RoleProtectedRouteGuard>} />
+          <Route path="/technical-sanction" element={<RoleProtectedRouteGuard path="/estimation"><ProjectEstimation /></RoleProtectedRouteGuard>} />
+          <Route path="/test-check" element={<RoleProtectedRouteGuard path="/boq-mb"><BoqMb /></RoleProtectedRouteGuard>} />
+          <Route path="/photo-gallery" element={<RoleProtectedRouteGuard path="/site-logs"><SiteLogs /></RoleProtectedRouteGuard>} />
           <Route path="/contractor-awards" element={<RoleProtectedRouteGuard path="/contractor-awards"><ContractorAwards /></RoleProtectedRouteGuard>} />
           <Route path="/work-orders" element={<RoleProtectedRouteGuard path="/work-orders"><WorkOrders /></RoleProtectedRouteGuard>} />
           <Route path="/vendors" element={<RoleProtectedRouteGuard path="/vendors"><Vendors /></RoleProtectedRouteGuard>} />
@@ -124,6 +143,8 @@ export default function App() {
           <Route path="/projects/:id" element={<RoleProtectedRouteGuard path="/projects"><ProjectDetails /></RoleProtectedRouteGuard>} />
           <Route path="/wbs" element={<RoleProtectedRouteGuard path="/wbs"><WbsGantt /></RoleProtectedRouteGuard>} />
           <Route path="/work-plan" element={<RoleProtectedRouteGuard path="/work-plan"><WorkPlan /></RoleProtectedRouteGuard>} />
+          <Route path="/milestones" element={<RoleProtectedRouteGuard path="/milestones"><Milestones /></RoleProtectedRouteGuard>} />
+          <Route path="/hindrances" element={<RoleProtectedRouteGuard path="/hindrances"><HindranceManagement /></RoleProtectedRouteGuard>} />
           <Route path="/task-assignments" element={<RoleProtectedRouteGuard path="/task-assignments"><TaskAssignments /></RoleProtectedRouteGuard>} />
           <Route path="/project-team" element={<RoleProtectedRouteGuard path="/project-team"><ProjectTeam /></RoleProtectedRouteGuard>} />
           <Route path="/site-logs" element={<RoleProtectedRouteGuard path="/site-logs"><SiteLogs /></RoleProtectedRouteGuard>} />
@@ -148,6 +169,7 @@ export default function App() {
           <Route path="/sessions" element={<RoleProtectedRouteGuard path="/sessions"><SessionManagement /></RoleProtectedRouteGuard>} />
           <Route path="/audit-logs" element={<RoleProtectedRouteGuard path="/audit-logs"><AuditLogs /></RoleProtectedRouteGuard>} />
           <Route path="/settings" element={<RoleProtectedRouteGuard path="/settings"><Settings /></RoleProtectedRouteGuard>} />
+          <Route path="/mobile" element={<MobileApp />} />
         </Routes>
       </div>
     </div>
