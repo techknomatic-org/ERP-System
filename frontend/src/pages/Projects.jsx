@@ -58,10 +58,16 @@ export default function Projects() {
     if (storedRole) setUserRole(storedRole);
 
     Promise.all([
-      projectService.getProjects(),
-      projectService.getDivisions(true),
-      projectService.getDivisions(false),
-      projectService.getTenantSettings(),
+      projectService.getProjects().catch((err) => {
+        console.error("Error fetching projects:", err);
+        return { data: [] };
+      }),
+      projectService.getDivisions(true).catch(() => ({ data: [] })),
+      projectService.getDivisions(false).catch(() => ({ data: [] })),
+      projectService.getTenantSettings().catch((err) => {
+        console.warn("Tenant settings fallback:", err);
+        return { data: { is_p2_enabled: false, is_funding_mode_enabled: false } };
+      }),
       customerService.getCustomers().catch(() => ({ data: [] })),
       authService.getUsers().catch(() => ({ data: [] }))
     ])
@@ -71,8 +77,8 @@ export default function Projects() {
         setAllDivisions(allDivRes.data || []);
         if (settingsRes.data) {
           setTenantSettings({
-            is_p2_enabled: settingsRes.data.is_p2_enabled,
-            is_funding_mode_enabled: settingsRes.data.is_funding_mode_enabled
+            is_p2_enabled: !!settingsRes.data.is_p2_enabled,
+            is_funding_mode_enabled: !!settingsRes.data.is_funding_mode_enabled
           });
         }
         setCustomers(custRes.data || []);
@@ -597,9 +603,11 @@ export default function Projects() {
                       onChange={handleInputChange}
                     >
                       <option value="">-- Select Project Manager --</option>
-                      {users.map(u => (
-                        <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>
-                      ))}
+                      {users
+                        .filter(u => u.is_active !== false && (['project_manager', 'contractor_pm', 'admin', 'management'].includes((u.role || '').toLowerCase()) || users.length <= 5))
+                        .map(u => (
+                          <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>
+                        ))}
                     </select>
                   </div>
                 </div>

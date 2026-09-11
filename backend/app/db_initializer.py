@@ -1,5 +1,11 @@
 import os
+import sys
 import pymysql
+
+backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+
 from sqlalchemy import text, inspect
 from app.config import settings
 from app.database import engine, Base, SessionLocal
@@ -186,6 +192,19 @@ def auto_init_db():
             for col, col_type in cb_cols:
                 add_col_if_missing("contractor_bills", col, col_type)
 
+            # tenant_settings
+            ts_cols = [
+                ("tenant_name", "VARCHAR(100) NOT NULL DEFAULT 'Default Tenant'"),
+                ("is_p2_enabled", "TINYINT(1) DEFAULT 0"),
+                ("is_funding_mode_enabled", "TINYINT(1) DEFAULT 0"),
+                ("ae_sampling_rate", "DECIMAL(5, 2) NOT NULL DEFAULT 50.00"),
+                ("ee_sampling_rate", "DECIMAL(5, 2) NOT NULL DEFAULT 10.00"),
+                ("max_file_upload_mb", "INT NOT NULL DEFAULT 10"),
+                ("updated_at", "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
+            ]
+            for col, col_type in ts_cols:
+                add_col_if_missing("tenant_settings", col, col_type)
+
             # Inspector scan for missing columns
             try:
                 inspector = inspect(engine)
@@ -226,7 +245,14 @@ def auto_init_db():
         # Seed Tenant Settings
         def_ts = db.query(TenantSetting).first()
         if not def_ts:
-            def_ts = TenantSetting(company_name="Default Tenant", brand_name="Project Flow", is_active=True)
+            def_ts = TenantSetting(
+                tenant_name="Default Tenant",
+                is_p2_enabled=False,
+                is_funding_mode_enabled=False,
+                ae_sampling_rate=50.00,
+                ee_sampling_rate=10.00,
+                max_file_upload_mb=10
+            )
             db.add(def_ts)
             seed_applied_now = True
 

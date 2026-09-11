@@ -1,14 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { HardHat, Plus, Camera, Upload, CheckCircle2, Clock, AlertCircle, ArrowLeft, Layers, CheckSquare, X, Image as ImageIcon, Trash2, Filter, Eye, User, Calendar, Tag, Activity, CalendarDays, AlertTriangle } from 'lucide-react';
-import { projectService, siteLogService, boqMbService, authService, workPlanService } from '../services/api';
+import { projectService, siteLogService, boqMbService, authService, workPlanService, getFileUrl } from '../services/api';
 
-const getImageUrl = (filePath) => {
-  if (!filePath) return '';
-  if (filePath.startsWith('http://') || filePath.startsWith('https://')) return filePath;
-  const cleanPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
-  return `http://localhost:8000/${cleanPath}`;
-};
+const getImageUrl = (filePath) => getFileUrl(filePath);
 
 export default function SiteLogs() {
   const [searchParams] = useSearchParams();

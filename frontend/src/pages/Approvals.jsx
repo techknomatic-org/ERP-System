@@ -1,13 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, XCircle, RotateCcw, ShieldCheck, DollarSign, HardHat, ArrowRight, UserCheck, Clock, Check, Plus, FileText, Camera, X } from 'lucide-react';
-import { approvalService, projectService, siteLogService, contractorBillingService } from '../services/api';
+import { approvalService, projectService, siteLogService, contractorBillingService, getFileUrl } from '../services/api';
 
-const getImageUrl = (filePath) => {
-  if (!filePath) return '';
-  if (filePath.startsWith('http://') || filePath.startsWith('https://')) return filePath;
-  const cleanPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
-  return `http://localhost:8000/${cleanPath}`;
-};
+const getImageUrl = (filePath) => getFileUrl(filePath);
 
 const FINANCIAL_TYPES = [
   "pr", "purchaserequisition", "po", "purchaseorder", "payment", 

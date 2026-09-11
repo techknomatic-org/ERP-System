@@ -27,6 +27,23 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+export const getFileUrl = (filePath) => {
+  if (!filePath) return '';
+  if (filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('data:')) {
+    return filePath;
+  }
+  const cleanPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+  if (API_BASE_URL.startsWith('/')) {
+    return `${window.location.origin}/${cleanPath}`;
+  }
+  try {
+    const urlObj = new URL(API_BASE_URL);
+    return `${urlObj.origin}/${cleanPath}`;
+  } catch (e) {
+    return `/${cleanPath}`;
+  }
+};
+
 
 export const authService = {
   getUsers: () => api.get('/auth/users'),
