@@ -674,10 +674,11 @@ def init_tables_and_seed():
                 p.sor_region_id = r_mh.id
                 p.sor_region_name = r_mh.name
                 p_changed = True
-            if p_changed:
-                db.commit()
+        # Ensure all 4 canonical demo projects and complete enterprise chains
+        from app.seed_demo_projects import ensure_demo_projects_and_data
+        ensure_demo_projects_and_data(db)
 
-        print("[+] Seed dataset for PROJ-GREENFIELD verified/created successfully!")
+        print("[+] Seed dataset for 4 canonical demo projects verified/created successfully!")
 
     except Exception as e:
         db.rollback()

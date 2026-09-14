@@ -285,6 +285,14 @@ def auto_init_db():
                 seed_applied_now = True
 
         db.commit()
+
+        # 4. Master Demo Projects & End-to-End Enterprise Chain Auto-Seed
+        try:
+            from app.seed_demo_projects import ensure_demo_projects_and_data
+            ensure_demo_projects_and_data(db)
+        except Exception as seed_err:
+            print(f"[Seed Warning] Demo projects seed note: {seed_err}")
+
         db.close()
 
         if seed_applied_now:

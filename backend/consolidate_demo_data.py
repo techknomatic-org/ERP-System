@@ -799,10 +799,8 @@ def main():
     step1_ensure_columns()
     db = SessionLocal()
     try:
-        step2_archive_non_demo_projects(db)
-        step3_seed_metro_tower(db)
-        step4_seed_greenfield(db)
-        step5_seed_riverside(db)
+        from app.seed_demo_projects import ensure_demo_projects_and_data
+        ensure_demo_projects_and_data(db)
     finally:
         db.close()
     step6_verify()
