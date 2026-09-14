@@ -352,41 +352,75 @@ export default function Dashboard() {
   const isAnyWidgetLoading = actionQueue.loading || scheduleSnapshot.loading || costSnapshot.loading || approvalsPending.loading;
 
   return (
-    <div className="content-page" style={{ maxWidth: '1280px' }}>
+    <div className="content-page" style={{ maxWidth: '1440px', margin: '0 auto', width: '100%' }}>
       
       {/* 1. UNIFIED DASHBOARD HEADER BAR */}
-      <div className="section-header" style={{ marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1.25rem' }}>
         <div>
-          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            {isSE ? <HardHat size={28} color="var(--accent-emerald)" /> :
-             isPM ? <HardHat size={28} color="var(--accent-amber)" /> :
-             isFinance ? <DollarSign size={28} color="var(--accent-emerald)" /> :
-             isProcurement ? <ShoppingCart size={28} color="var(--primary)" /> :
-             isManagement ? <Briefcase size={28} color="var(--accent-cyan)" /> :
-             <Building2 size={28} color="var(--primary)" />}
-            Unified Project Dashboard
-          </h1>
-          <p className="page-subtitle">
-            PM Command Center • Live WBS Execution, Milestone Schedule, Cost Snapshot & Action Queue
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            <div style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(245, 158, 11, 0.06))',
+              border: '1px solid rgba(245, 158, 11, 0.35)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 0 20px rgba(245, 158, 11, 0.15)',
+              flexShrink: 0
+            }}>
+              {isSE ? <HardHat size={25} color="#10b981" /> :
+               isPM ? <HardHat size={25} color="#f59e0b" /> :
+               isFinance ? <DollarSign size={25} color="#10b981" /> :
+               isProcurement ? <ShoppingCart size={25} color="#6366f1" /> :
+               isManagement ? <Briefcase size={25} color="#06b6d4" /> :
+               <Building2 size={25} color="#6366f1" />}
+            </div>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.65rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#f8fafc' }}>
+                Unified Project Dashboard
+              </h1>
+              <p style={{ margin: '0.2rem 0 0 0', color: '#94a3b8', fontSize: '0.84rem' }}>
+                PM Command Center • Live WBS Execution, Milestone Schedule, Cost Snapshot & Action Queue
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          
+        {/* Command Controls Toolbar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
           {/* Project Switcher Dropdown */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(255,255,255,0.05)', padding: '0.4rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <Building2 size={16} color="var(--accent-amber)" />
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            background: 'rgba(15, 23, 42, 0.85)',
+            padding: '0.35rem 0.75rem',
+            borderRadius: '10px',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.25)'
+          }}>
+            <Building2 size={15} color="#f59e0b" style={{ flexShrink: 0 }} />
             <select
               id="project-switcher-select"
-              className="form-control"
-              style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '0.88rem', padding: '0 0.5rem', fontWeight: 600, cursor: 'pointer' }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#f8fafc',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                outline: 'none',
+                maxWidth: '280px'
+              }}
               value={selectedProjectId}
               onChange={(e) => handleProjectSwitch(e.target.value)}
               disabled={projectsLoading || projects.length === 0}
             >
               {projects.length === 0 && <option value="">No projects available</option>}
               {projects.map((p) => (
-                <option key={p.id} value={p.id} style={{ background: '#1e293b', color: '#fff' }}>
+                <option key={p.id} value={p.id} style={{ background: '#0f172a', color: '#f8fafc' }}>
                   {p.code} — {p.name} ({p.status})
                 </option>
               ))}
@@ -394,89 +428,213 @@ export default function Dashboard() {
           </div>
 
           {/* Date Range Filter Dropdown */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(255,255,255,0.05)', padding: '0.4rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <Calendar size={16} color="var(--accent-cyan)" />
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            background: 'rgba(15, 23, 42, 0.85)',
+            padding: '0.35rem 0.75rem',
+            borderRadius: '10px',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.25)'
+          }}>
+            <Calendar size={15} color="#38bdf8" style={{ flexShrink: 0 }} />
             <select
               id="date-range-filter-select"
-              className="form-control"
-              style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '0.88rem', padding: '0 0.5rem', fontWeight: 600, cursor: 'pointer' }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#f8fafc',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                outline: 'none'
+              }}
               value={dateRange}
               onChange={(e) => handleDateRangeChange(e.target.value)}
             >
-              <option value="this_week" style={{ background: '#1e293b', color: '#fff' }}>This Week</option>
-              <option value="this_month" style={{ background: '#1e293b', color: '#fff' }}>This Month</option>
-              <option value="full_contract" style={{ background: '#1e293b', color: '#fff' }}>Full Contract</option>
+              <option value="this_week" style={{ background: '#0f172a', color: '#f8fafc' }}>This Week</option>
+              <option value="this_month" style={{ background: '#0f172a', color: '#f8fafc' }}>This Month</option>
+              <option value="full_contract" style={{ background: '#0f172a', color: '#f8fafc' }}>Full Contract</option>
             </select>
           </div>
 
-          <span className="tag-badge tag-success">
+          {/* Active Role Badge */}
+          <span className="tag-badge" style={{
+            background: 'rgba(16, 185, 129, 0.15)',
+            color: '#34d399',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            fontWeight: 700,
+            fontSize: '0.75rem',
+            padding: '0.45rem 0.75rem',
+            letterSpacing: '0.04em'
+          }}>
             {roleLower.replace('_', ' ').toUpperCase()}
           </span>
 
+          {/* Refresh Button */}
           <button
             type="button"
             className="btn btn-secondary btn-sm"
             onClick={() => loadAllWidgets(selectedProjectId, dateRange)}
             disabled={!selectedProjectId}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.85rem' }}
           >
-            <RefreshCw size={14} className={isAnyWidgetLoading ? "spin-animation" : ""} /> Refresh
+            <RefreshCw size={14} className={isAnyWidgetLoading ? "spin-animation" : ""} />
+            <span>Refresh</span>
           </button>
         </div>
       </div>
 
-      {/* PROJECT CONTEXT HEADER BANNER */}
+      {/* ACTIVE PROJECT CONTEXT HERO CARD */}
       {currentProject.name && (
-        <div className="glass-card" style={{ marginBottom: '1.25rem', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%)', borderColor: 'rgba(56, 189, 248, 0.2)' }}>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--accent-cyan)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Active Project Context</div>
-            <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#fff', marginTop: '0.2rem' }}>
-              [{currentProject.code}] {currentProject.name}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(19, 29, 51, 0.95) 0%, rgba(11, 19, 38, 0.98) 100%)',
+          border: '1px solid rgba(99, 102, 241, 0.28)',
+          borderRadius: '16px',
+          padding: '1.25rem 1.6rem',
+          marginBottom: '1.5rem',
+          boxShadow: '0 10px 30px -5px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08)',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          {/* Ambient Glow */}
+          <div style={{
+            position: 'absolute',
+            top: '-60px',
+            right: '-60px',
+            width: '220px',
+            height: '220px',
+            background: 'radial-gradient(circle, rgba(99, 102, 241, 0.2) 0%, transparent 70%)',
+            pointerEvents: 'none'
+          }} />
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.25rem', position: 'relative', zIndex: 1 }}>
+            <div style={{ flex: '1 1 420px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  color: '#38bdf8',
+                  background: 'rgba(56, 189, 248, 0.12)',
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(56, 189, 248, 0.25)'
+                }}>
+                  Active Project Context
+                </span>
+                {currentProject.contract_type && (
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: 'rgba(255,255,255,0.04)', padding: '0.2rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    {currentProject.contract_type}
+                  </span>
+                )}
+                {currentProject.division_name && (
+                  <span style={{ fontSize: '0.72rem', color: '#cbd5e1', background: 'rgba(255,255,255,0.04)', padding: '0.2rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    {currentProject.division_name}
+                  </span>
+                )}
+                {currentProject.location && (
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: 'rgba(255,255,255,0.04)', padding: '0.2rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    📍 {currentProject.location}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <span style={{
+                  fontSize: '0.95rem',
+                  fontWeight: 800,
+                  color: '#818cf8',
+                  background: 'rgba(99, 102, 241, 0.15)',
+                  padding: '0.2rem 0.65rem',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(99, 102, 241, 0.3)'
+                }}>
+                  {currentProject.code}
+                </span>
+                <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 700, color: '#f8fafc' }}>
+                  {currentProject.name}
+                </h2>
+              </div>
             </div>
-          </div>
-          <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Status</div>
-              <span className={`tag-badge ${currentProject.status === 'ACTIVE' || currentProject.status === 'IN_PROGRESS' ? 'tag-success' : 'tag-warning'}`} style={{ marginTop: '0.2rem' }}>
-                {currentProject.status || 'ACTIVE'}
-              </span>
-            </div>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>WBS Progress</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent-emerald)', marginTop: '0.1rem' }}>
-                {currentProject.progress_pct || scheduleSnapshot.data.wbs_progress_pct || 0}%
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', flexWrap: 'wrap' }}>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, marginBottom: '0.25rem' }}>Project Status</div>
+                <span className={`tag-badge ${currentProject.status === 'ACTIVE' || currentProject.status === 'IN_PROGRESS' ? 'tag-success' : 'tag-warning'}`} style={{ padding: '0.35rem 0.85rem', fontSize: '0.78rem', fontWeight: 700 }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: currentProject.status === 'ACTIVE' ? '#34d399' : '#fbbf24', display: 'inline-block', marginRight: '6px', boxShadow: currentProject.status === 'ACTIVE' ? '0 0 6px #34d399' : undefined }}></span>
+                  {currentProject.status || 'ACTIVE'}
+                </span>
+              </div>
+
+              <div style={{ minWidth: '160px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>WBS Progress</span>
+                  <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#10b981' }}>
+                    {currentProject.progress_pct || scheduleSnapshot.data.wbs_progress_pct || 0}%
+                  </span>
+                </div>
+                <div style={{ height: '7px', width: '100%', background: 'rgba(255,255,255,0.08)', borderRadius: '9999px', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${Math.min(100, Math.max(0, currentProject.progress_pct || scheduleSnapshot.data.wbs_progress_pct || 0))}%`,
+                    background: 'linear-gradient(90deg, #10b981, #06b6d4)',
+                    borderRadius: '9999px',
+                    transition: 'width 0.4s ease'
+                  }} />
+                </div>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 2. UNIFIED 2x2 WIDGET GRID (Independent Fault Tolerance) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(580px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
+      {/* 2. UNIFIED 2x2 WIDGET GRID */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '1.35rem', marginBottom: '1.75rem' }}>
 
         {/* WIDGET A: ACTION QUEUE */}
-        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', minHeight: '320px' }}>
-          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Clock size={18} color="var(--accent-amber)" /> Action Queue
+        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', minHeight: '340px', background: 'rgba(19, 29, 51, 0.75)', borderColor: 'rgba(255,255,255,0.08)' }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+            <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.14)', border: '1px solid rgba(245, 158, 11, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Clock size={16} color="#f59e0b" />
+              </div>
+              <span style={{ fontWeight: 700, fontSize: '1.02rem', color: '#f8fafc' }}>Action Queue</span>
             </div>
-            <span className={`tag-badge ${actionQueue.error ? 'tag-danger' : 'tag-warning'}`} style={{ fontSize: '0.75rem' }}>
-              {actionQueue.error ? 'Unavailable' : actionQueue.loading ? 'Loading...' : `${actionQueue.count} Pending`}
+            <span className="tag-badge" style={{
+              background: actionQueue.error ? 'rgba(239,68,68,0.12)' : actionQueue.count > 0 ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255,255,255,0.05)',
+              color: actionQueue.error ? '#f87171' : actionQueue.count > 0 ? '#fbbf24' : '#94a3b8',
+              border: actionQueue.count > 0 ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(255,255,255,0.08)',
+              fontSize: '0.75rem',
+              fontWeight: 700
+            }}>
+              {actionQueue.error ? 'Unavailable' : actionQueue.loading ? 'Loading...' : `${actionQueue.count} PENDING`}
             </span>
           </div>
 
           {actionQueue.error ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: '#fbbf24', fontSize: '0.9rem' }}>
-              <AlertTriangle size={24} style={{ margin: '0 auto 0.5rem', display: 'block' }} />
+            <div style={{ padding: '2.5rem', textAlign: 'center', color: '#fbbf24', fontSize: '0.9rem' }}>
+              <AlertTriangle size={26} style={{ margin: '0 auto 0.6rem', display: 'block' }} />
               {actionQueue.error}
             </div>
           ) : actionQueue.loading ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-              Loading...
+            <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              Loading action items...
             </div>
           ) : actionQueue.items.length === 0 ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
-              <CheckCircle2 size={32} color="var(--accent-emerald)" style={{ margin: '0 auto 0.5rem', display: 'block' }} />
-              No pending action items for your role on this project.
+            <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.85rem' }}>
+                <CheckCircle2 size={24} color="#10b981" />
+              </div>
+              <div style={{ color: '#f8fafc', fontWeight: 600, fontSize: '0.92rem', marginBottom: '0.2rem' }}>Queue is Clear</div>
+              <div style={{ color: '#94a3b8', fontSize: '0.82rem', maxWidth: '320px', lineHeight: '1.4' }}>
+                No pending action items for your role on this project.
+              </div>
             </div>
           ) : (
             <div style={{ overflowX: 'auto', flex: 1 }}>
@@ -505,7 +663,7 @@ export default function Dashboard() {
                         <button
                           type="button"
                           className="btn btn-secondary btn-sm"
-                          style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                          style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem' }}
                           onClick={() => navigate(item.route || '/approvals')}
                         >
                           Review ➔
@@ -517,111 +675,162 @@ export default function Dashboard() {
               </table>
             </div>
           )}
-          <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.05)', textAlign: 'right' }}>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate('/approvals')}>
-              View Full Action Queue ➔
+
+          <div style={{ marginTop: 'auto', paddingTop: '0.85rem', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate('/approvals')} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem' }}>
+              <span>View Full Action Queue</span>
+              <ArrowRight size={13} />
             </button>
           </div>
         </div>
 
         {/* WIDGET D: APPROVALS PENDING */}
-        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', minHeight: '320px' }}>
-          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <CheckSquare size={18} color="var(--accent-rose)" /> Approvals Pending
+        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', minHeight: '340px', background: 'rgba(19, 29, 51, 0.75)', borderColor: 'rgba(255,255,255,0.08)' }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+            <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <div style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                background: approvalsPending.pending_count > 0 ? 'rgba(244, 63, 94, 0.14)' : 'rgba(16, 185, 129, 0.14)',
+                border: approvalsPending.pending_count > 0 ? '1px solid rgba(244, 63, 94, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <CheckSquare size={16} color={approvalsPending.pending_count > 0 ? '#f43f5e' : '#10b981'} />
+              </div>
+              <span style={{ fontWeight: 700, fontSize: '1.02rem', color: '#f8fafc' }}>Approvals Pending</span>
             </div>
-            <span className="tag-badge tag-danger" style={{ fontSize: '0.75rem' }}>
-              {approvalsPending.error ? 'Unavailable' : approvalsPending.loading ? 'Loading...' : `${approvalsPending.pending_count} Requiring Action`}
+            <span className="tag-badge" style={{
+              background: approvalsPending.error ? 'rgba(239,68,68,0.12)' : approvalsPending.pending_count > 0 ? 'rgba(244, 63, 94, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+              color: approvalsPending.error ? '#f87171' : approvalsPending.pending_count > 0 ? '#f43f5e' : '#34d399',
+              border: approvalsPending.pending_count > 0 ? '1px solid rgba(244, 63, 94, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)',
+              fontSize: '0.75rem',
+              fontWeight: 700
+            }}>
+              {approvalsPending.error ? 'Unavailable' : approvalsPending.loading ? 'Loading...' : `${approvalsPending.pending_count} REQUIRING ACTION`}
             </span>
           </div>
 
           {approvalsPending.error ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: '#fbbf24', fontSize: '0.9rem' }}>
-              <AlertTriangle size={24} style={{ margin: '0 auto 0.5rem', display: 'block' }} />
+            <div style={{ padding: '2.5rem', textAlign: 'center', color: '#fbbf24', fontSize: '0.9rem' }}>
+              <AlertTriangle size={26} style={{ margin: '0 auto 0.6rem', display: 'block' }} />
               {approvalsPending.error}
             </div>
           ) : approvalsPending.loading ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-              Loading...
+            <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              Loading pending approvals...
             </div>
           ) : (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', padding: '1rem', background: 'rgba(239, 68, 68, 0.08)', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#f87171', lineHeight: 1 }}>
-                  {approvalsPending.pending_count}
-                </div>
-                <div>
-                  <div style={{ fontWeight: 600, color: '#fff', fontSize: '0.95rem' }}>
-                    Multi-Stage Approvals Awaiting Sign-Off
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
+              {/* Highlight Banner */}
+              {approvalsPending.pending_count > 0 ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', padding: '1rem 1.25rem', background: 'rgba(239, 68, 68, 0.08)', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+                  <div style={{ fontSize: '2.4rem', fontWeight: 800, color: '#f87171', lineHeight: 1 }}>
+                    {approvalsPending.pending_count}
                   </div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                    Role-aware and project-aware pending workflows requiring authorization
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.95rem' }}>
+                      Multi-Stage Approvals Awaiting Sign-Off
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#cbd5e1', marginTop: '0.15rem' }}>
+                      Role-aware and project-aware pending workflows requiring authorization
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', padding: '1rem 1.25rem', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                  <div style={{ fontSize: '2.4rem', fontWeight: 800, color: '#34d399', lineHeight: 1 }}>
+                    0
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.95rem' }}>
+                      All Workflows Signed Off
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.15rem' }}>
+                      No multi-stage approvals awaiting your authorization on this project.
+                    </div>
+                  </div>
+                </div>
+              )}
 
-              <div style={{ marginTop: '1rem' }}>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.5rem', textTransform: 'uppercase' }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 700, marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Pending Workflow Tasks
                 </div>
                 {approvalsPending.items && approvalsPending.items.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
                     {approvalsPending.items.slice(0, 3).map((item) => (
-                      <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.4rem 0.6rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', fontSize: '0.8rem' }}>
+                      <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', fontSize: '0.82rem', border: '1px solid rgba(255,255,255,0.05)' }}>
                         <span style={{ color: '#fff', fontWeight: 500 }}>{item.title}</span>
-                        <span style={{ color: 'var(--accent-amber)', fontSize: '0.75rem' }}>{item.current_stage}</span>
+                        <span style={{ color: 'var(--accent-amber)', fontSize: '0.75rem', fontWeight: 600 }}>{item.current_stage}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>0 pending approval tasks.</div>
+                  <div style={{ fontSize: '0.82rem', color: '#64748b', fontStyle: 'italic', padding: '0.25rem 0' }}>
+                    0 pending approval tasks.
+                  </div>
                 )}
               </div>
             </div>
           )}
 
-          <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.05)', textAlign: 'right' }}>
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => navigate('/approvals')}>
-              Open Approval Workspace ➔
+          <div style={{ marginTop: 'auto', paddingTop: '0.85rem', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => navigate('/approvals')} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem' }}>
+              <span>Open Approval Workspace</span>
+              <ArrowRight size={13} />
             </button>
           </div>
         </div>
 
         {/* WIDGET B: SCHEDULE SNAPSHOT */}
-        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', minHeight: '340px' }}>
-          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Layers size={18} color="var(--accent-emerald)" /> Schedule Snapshot
+        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', minHeight: '360px', background: 'rgba(19, 29, 51, 0.75)', borderColor: 'rgba(255,255,255,0.08)' }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+            <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.14)', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Layers size={16} color="#10b981" />
+              </div>
+              <span style={{ fontWeight: 700, fontSize: '1.02rem', color: '#f8fafc' }}>Schedule Snapshot</span>
             </div>
-            <span className={`tag-badge ${scheduleSnapshot.error ? 'tag-danger' : 'tag-info'}`} style={{ fontSize: '0.75rem' }}>
-              {scheduleSnapshot.error ? 'Unavailable' : scheduleSnapshot.loading ? 'Loading...' : dateRange.replace('_', ' ').toUpperCase()}
+            <span className="tag-badge" style={{
+              background: 'rgba(56, 189, 248, 0.12)',
+              color: '#38bdf8',
+              border: '1px solid rgba(56, 189, 248, 0.25)',
+              fontSize: '0.75rem',
+              fontWeight: 700
+            }}>
+              {dateRange.replace('_', ' ').toUpperCase()}
             </span>
           </div>
 
           {scheduleSnapshot.error ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: '#fbbf24', fontSize: '0.9rem' }}>
-              <AlertTriangle size={24} style={{ margin: '0 auto 0.5rem', display: 'block' }} />
+            <div style={{ padding: '2.5rem', textAlign: 'center', color: '#fbbf24', fontSize: '0.9rem' }}>
+              <AlertTriangle size={26} style={{ margin: '0 auto 0.6rem', display: 'block' }} />
               {scheduleSnapshot.error}
             </div>
           ) : scheduleSnapshot.loading ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-              Loading...
+            <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              Loading schedule snapshot...
             </div>
           ) : (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              
-              {/* WBS Execution Progress */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+              {/* WBS Execution Progress Bar */}
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.35rem' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>WBS Execution Progress</span>
-                  <span style={{ fontWeight: 700, color: 'var(--accent-emerald)' }}>{scheduleSnapshot.data.wbs_progress_pct || 0}%</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.4rem' }}>
+                  <span style={{ color: '#94a3b8', fontWeight: 600 }}>WBS Execution Progress</span>
+                  <span style={{ fontWeight: 800, color: '#10b981', fontSize: '0.95rem' }}>
+                    {scheduleSnapshot.data.wbs_progress_pct || 0}%
+                  </span>
                 </div>
-                <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '9999px', overflow: 'hidden' }}>
                   <div 
                     style={{ 
                       height: '100%', 
                       width: `${Math.min(100, Math.max(0, scheduleSnapshot.data.wbs_progress_pct || 0))}%`, 
                       background: 'linear-gradient(90deg, #10b981 0%, #34d399 100%)',
+                      borderRadius: '9999px',
                       transition: 'width 0.4s ease'
                     }} 
                   />
@@ -629,90 +838,103 @@ export default function Dashboard() {
               </div>
 
               {/* WBS Node Stats Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', textAlign: 'center' }}>
-                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.5rem', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff' }}>{scheduleSnapshot.data.total_wbs_nodes ?? 0}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Total Nodes</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.65rem', textAlign: 'center' }}>
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.65rem 0.5rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>{scheduleSnapshot.data.total_wbs_nodes ?? 0}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600, marginTop: '0.1rem' }}>Total Nodes</div>
                 </div>
-                <div style={{ background: 'rgba(56, 189, 248, 0.08)', padding: '0.5rem', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#38bdf8' }}>{scheduleSnapshot.data.active_wbs_nodes ?? 0}</div>
-                  <div style={{ fontSize: '0.7rem', color: '#38bdf8' }}>Active</div>
+                <div style={{ background: 'rgba(56, 189, 248, 0.08)', padding: '0.65rem 0.5rem', borderRadius: '10px', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#38bdf8' }}>{scheduleSnapshot.data.active_wbs_nodes ?? 0}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#38bdf8', fontWeight: 600, marginTop: '0.1rem' }}>Active</div>
                 </div>
-                <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '0.5rem', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#10b981' }}>{scheduleSnapshot.data.completed_wbs_nodes ?? 0}</div>
-                  <div style={{ fontSize: '0.7rem', color: '#10b981' }}>Completed</div>
+                <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '0.65rem 0.5rem', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#10b981' }}>{scheduleSnapshot.data.completed_wbs_nodes ?? 0}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 600, marginTop: '0.1rem' }}>Completed</div>
                 </div>
-                <div style={{ background: 'rgba(244, 63, 94, 0.08)', padding: '0.5rem', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f43f5e' }}>{scheduleSnapshot.data.delayed_wbs_nodes ?? 0}</div>
-                  <div style={{ fontSize: '0.7rem', color: '#f43f5e' }}>Delayed</div>
+                <div style={{ background: 'rgba(244, 63, 94, 0.08)', padding: '0.65rem 0.5rem', borderRadius: '10px', border: '1px solid rgba(244, 63, 94, 0.2)' }}>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f43f5e' }}>{scheduleSnapshot.data.delayed_wbs_nodes ?? 0}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#f43f5e', fontWeight: 600, marginTop: '0.1rem' }}>Delayed</div>
                 </div>
               </div>
 
               {/* Milestones Summary */}
-              <div style={{ paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.4rem', textTransform: 'uppercase' }}>
+              <div style={{ paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 700, marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Milestones Overview
                 </div>
-                <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem' }}>
-                  <span>Total: <strong>{scheduleSnapshot.data.total_milestones ?? 0}</strong></span>
-                  <span style={{ color: '#10b981' }}>Completed: <strong>{scheduleSnapshot.data.completed_milestones ?? 0}</strong></span>
-                  <span style={{ color: '#38bdf8' }}>Upcoming: <strong>{scheduleSnapshot.data.upcoming_milestones ?? 0}</strong></span>
-                  <span style={{ color: '#f43f5e' }}>Delayed: <strong>{scheduleSnapshot.data.delayed_milestones ?? 0}</strong></span>
+                <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', flexWrap: 'wrap' }}>
+                  <span style={{ background: 'rgba(255,255,255,0.04)', padding: '0.2rem 0.6rem', borderRadius: '6px' }}>Total: <strong style={{ color: '#fff' }}>{scheduleSnapshot.data.total_milestones ?? 0}</strong></span>
+                  <span style={{ background: 'rgba(16, 185, 129, 0.08)', color: '#10b981', padding: '0.2rem 0.6rem', borderRadius: '6px' }}>Completed: <strong>{scheduleSnapshot.data.completed_milestones ?? 0}</strong></span>
+                  <span style={{ background: 'rgba(56, 189, 248, 0.08)', color: '#38bdf8', padding: '0.2rem 0.6rem', borderRadius: '6px' }}>Upcoming: <strong>{scheduleSnapshot.data.upcoming_milestones ?? 0}</strong></span>
+                  <span style={{ background: 'rgba(244, 63, 94, 0.08)', color: '#f43f5e', padding: '0.2rem 0.6rem', borderRadius: '6px' }}>Delayed: <strong>{scheduleSnapshot.data.delayed_milestones ?? 0}</strong></span>
                 </div>
               </div>
             </div>
           )}
 
-          <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between' }}>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/wbs?project_id=${selectedProjectId}`)}>
-              WBS Tree ➔
+          <div style={{ marginTop: 'auto', paddingTop: '0.85rem', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/wbs?project_id=${selectedProjectId}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
+              <span>WBS Tree</span>
+              <ArrowRight size={13} />
             </button>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/milestones?project_id=${selectedProjectId}`)}>
-              Project Milestones ➔
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/milestones?project_id=${selectedProjectId}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
+              <span>Project Milestones</span>
+              <ArrowRight size={13} />
             </button>
           </div>
         </div>
 
         {/* WIDGET C: COST SNAPSHOT */}
-        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', minHeight: '340px' }}>
-          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <DollarSign size={18} color="var(--accent-cyan)" /> Cost Snapshot
+        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', minHeight: '360px', background: 'rgba(19, 29, 51, 0.75)', borderColor: 'rgba(255,255,255,0.08)' }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+            <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(6, 182, 212, 0.14)', border: '1px solid rgba(6, 182, 212, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <DollarSign size={16} color="#06b6d4" />
+              </div>
+              <span style={{ fontWeight: 700, fontSize: '1.02rem', color: '#f8fafc' }}>Cost Snapshot</span>
             </div>
-            <span className={`tag-badge ${costSnapshot.error ? 'tag-danger' : 'tag-success'}`} style={{ fontSize: '0.75rem' }}>
-              {costSnapshot.error ? 'Unavailable' : costSnapshot.loading ? 'Loading...' : 'Estimate vs Billed'}
+            <span className="tag-badge" style={{
+              background: 'rgba(16, 185, 129, 0.12)',
+              color: '#34d399',
+              border: '1px solid rgba(16, 185, 129, 0.25)',
+              fontSize: '0.75rem',
+              fontWeight: 700
+            }}>
+              ESTIMATE VS BILLED
             </span>
           </div>
 
           {costSnapshot.error ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: '#fbbf24', fontSize: '0.9rem' }}>
-              <AlertTriangle size={24} style={{ margin: '0 auto 0.5rem', display: 'block' }} />
+            <div style={{ padding: '2.5rem', textAlign: 'center', color: '#fbbf24', fontSize: '0.9rem' }}>
+              <AlertTriangle size={26} style={{ margin: '0 auto 0.6rem', display: 'block' }} />
               {costSnapshot.error}
             </div>
           ) : isSE ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+            <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
               <ShieldAlert size={28} color="var(--accent-amber)" style={{ margin: '0 auto 0.5rem', display: 'block' }} />
               Cost Snapshot is restricted for your role. Contact Finance/PM for financial reports.
             </div>
           ) : costSnapshot.loading ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-              Loading...
+            <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              Loading cost metrics...
             </div>
           ) : (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
               {/* Billed % Progress Bar */}
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.35rem' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Billed % of Detailed Estimate</span>
-                  <span style={{ fontWeight: 700, color: 'var(--accent-cyan)' }}>{costSnapshot.data.billed_percentage || 0}%</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.4rem' }}>
+                  <span style={{ color: '#94a3b8', fontWeight: 600 }}>Billed % of Detailed Estimate</span>
+                  <span style={{ fontWeight: 800, color: '#38bdf8', fontSize: '0.95rem' }}>
+                    {costSnapshot.data.billed_percentage || 0}%
+                  </span>
                 </div>
-                <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '9999px', overflow: 'hidden' }}>
                   <div 
                     style={{ 
                       height: '100%', 
                       width: `${Math.min(100, Math.max(0, costSnapshot.data.billed_percentage || 0))}%`, 
-                      background: 'linear-gradient(90deg, #06b6d4 0%, #38bdf8 100%)',
+                      background: 'linear-gradient(90deg, #06b6d4 0%, #6366f1 100%)',
+                      borderRadius: '9999px',
                       transition: 'width 0.4s ease'
                     }} 
                   />
@@ -721,42 +943,43 @@ export default function Dashboard() {
 
               {/* Financial Metrics Grid */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
-                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Detailed Estimate Total</div>
-                  <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#fff', marginTop: '0.2rem' }}>
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.85rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Detailed Estimate Total</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc', marginTop: '0.25rem' }}>
                     ₹{(costSnapshot.data.estimate_total || 0).toLocaleString()}
                   </div>
                 </div>
 
-                <div style={{ background: 'rgba(6, 182, 212, 0.08)', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(6, 182, 212, 0.2)' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--accent-cyan)' }}>Total Billed Amount</div>
-                  <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#38bdf8', marginTop: '0.2rem' }}>
+                <div style={{ background: 'rgba(6, 182, 212, 0.08)', padding: '0.85rem', borderRadius: '10px', border: '1px solid rgba(6, 182, 212, 0.22)' }}>
+                  <div style={{ fontSize: '0.72rem', color: '#38bdf8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total Billed Amount</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#38bdf8', marginTop: '0.25rem' }}>
                     ₹{(costSnapshot.data.billed_total || 0).toLocaleString()}
                   </div>
                 </div>
 
-                <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.2)', gridColumn: 'span 2' }}>
+                <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.22)', gridColumn: 'span 2' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--accent-emerald)' }}>Remaining / Unbilled Amount</div>
-                      <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#34d399', marginTop: '0.2rem' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#34d399', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Remaining / Unbilled Amount</div>
+                      <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#34d399', marginTop: '0.2rem' }}>
                         ₹{(costSnapshot.data.remaining_amount || 0).toLocaleString()}
                       </div>
                     </div>
-                    <span className="tag-badge tag-success">Available Budget</span>
+                    <span className="tag-badge tag-success" style={{ fontSize: '0.72rem', fontWeight: 700 }}>Available Budget</span>
                   </div>
                 </div>
               </div>
-
             </div>
           )}
 
-          <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between' }}>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate('/estimation')}>
-              Detailed Estimate ➔
+          <div style={{ marginTop: 'auto', paddingTop: '0.85rem', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate('/estimation')} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
+              <span>Detailed Estimate</span>
+              <ArrowRight size={13} />
             </button>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate('/contractor-billing')}>
-              Contractor Billing ➔
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate('/contractor-billing')} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
+              <span>Contractor Billing</span>
+              <ArrowRight size={13} />
             </button>
           </div>
         </div>

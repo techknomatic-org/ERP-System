@@ -68,6 +68,24 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.22) rgba(11, 19, 38, 0.6);
+}
+
+/* Global Custom Scrollbars for Chrome, Safari, Edge */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(8, 14, 30, 0.7);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.22);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.45);
 }
 
 body {
@@ -111,7 +129,7 @@ body {
    ========================================================================== */
 .navbar {
   height: 64px;
-  background: #0b1326;
+  background: #080e1e;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
@@ -120,7 +138,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
 .search-box {
@@ -131,7 +149,8 @@ body {
   border: 1px solid var(--border-color);
   padding: 0.45rem 0.85rem;
   border-radius: var(--radius-sm);
-  width: 380px;
+  width: 420px;
+  max-width: 38vw;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -520,7 +539,15 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
 }
 
+.form-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .form-control, .form-select {
+  width: 100%;
+  box-sizing: border-box;
   background: rgba(8, 14, 30, 0.95);
   border: 1px solid var(--border-color);
   padding: 0.55rem 0.85rem;
@@ -539,6 +566,26 @@ h1, h2, h3, h4, h5, h6 {
 
 .form-control::placeholder {
   color: var(--text-muted);
+}
+
+/* Sleek Modal Scrollbar */
+.custom-modal-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}
+.custom-modal-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-modal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-modal-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 4px;
+}
+.custom-modal-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.45);
 }
 
 /* Workflow Approval Stepper */

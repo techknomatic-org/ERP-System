@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   HardHat, Plus, Calendar, MapPin, ArrowRight, Settings, 
-  Building2, AlertTriangle, CheckCircle, Info, ShieldAlert, Layers
+  Building2, AlertTriangle, CheckCircle, Info, ShieldAlert, Layers, X
 } from 'lucide-react';
 import { projectService, customerService, authService } from '../services/api';
 
@@ -125,10 +125,22 @@ export default function Projects() {
       }
     }
 
+    if (field === 'code') {
+      if (!value.trim()) {
+        errors.code = "Project Code is required.";
+      } else {
+        delete errors.code;
+      }
+    }
+
     if (field === 'budget') {
-      const valNum = parseFloat(value);
-      if (value !== '' && (isNaN(valNum) || valNum <= 0)) {
-        errors.budget = "Estimated Contract Value must be greater than 0.";
+      if (value !== '' && value !== null && value !== undefined) {
+        const valNum = parseFloat(value);
+        if (isNaN(valNum) || valNum < 0) {
+          errors.budget = "Estimated Contract Value cannot be negative.";
+        } else {
+          delete errors.budget;
+        }
       } else {
         delete errors.budget;
       }
@@ -149,15 +161,19 @@ export default function Projects() {
         } else {
           delete warnings.start_date;
         }
+      } else {
+        delete warnings.start_date;
       }
 
-      // Scheduled Completion Date check
+      // Scheduled Completion Date check (only if both are present)
       if (startDateVal && endDateVal) {
         if (new Date(endDateVal) <= new Date(startDateVal)) {
           errors.end_date = "Scheduled Completion Date must be after Start Date.";
         } else {
           delete errors.end_date;
         }
+      } else {
+        delete errors.end_date;
       }
     }
 
@@ -176,7 +192,7 @@ export default function Projects() {
     e.preventDefault();
     setSubmitError('');
 
-    // Pre-submit Checks
+    // Pre-submit Checks: Project Name and Project Code are the only mandatory fields
     const nameClean = formData.name.trim();
     if (!nameClean) {
       setFormErrors(prev => ({ ...prev, name: "Project / Contract Name is required." }));
@@ -184,6 +200,12 @@ export default function Projects() {
     }
     if (nameClean.length > 120) {
       setFormErrors(prev => ({ ...prev, name: "Project Name cannot exceed 120 characters." }));
+      return;
+    }
+
+    const codeClean = formData.code.trim();
+    if (!codeClean) {
+      setFormErrors(prev => ({ ...prev, code: "Project Code is required." }));
       return;
     }
 
@@ -196,31 +218,38 @@ export default function Projects() {
       return;
     }
 
-    if (parseFloat(formData.budget) <= 0 || isNaN(parseFloat(formData.budget))) {
-      setFormErrors(prev => ({ ...prev, budget: "Estimated Contract Value must be greater than 0." }));
-      return;
+    // Budget: non-mandatory, but if entered must not be negative
+    if (formData.budget !== '' && formData.budget !== null && formData.budget !== undefined) {
+      const budgetNum = parseFloat(formData.budget);
+      if (isNaN(budgetNum) || budgetNum < 0) {
+        setFormErrors(prev => ({ ...prev, budget: "Estimated Contract Value cannot be negative." }));
+        return;
+      }
     }
 
-    if (new Date(formData.end_date) <= new Date(formData.start_date)) {
-      setFormErrors(prev => ({ ...prev, end_date: "Scheduled Completion Date must be after Start Date." }));
-      return;
+    // Dates: non-mandatory, but if both provided, end_date must be after start_date
+    if (formData.start_date && formData.end_date) {
+      if (new Date(formData.end_date) <= new Date(formData.start_date)) {
+        setFormErrors(prev => ({ ...prev, end_date: "Scheduled Completion Date must be after Start Date." }));
+        return;
+      }
     }
 
     const payload = {
       name: nameClean,
-      code: formData.code.trim(),
-      tenant_name: formData.tenant_name,
+      code: codeClean,
+      tenant_name: formData.tenant_name || 'Default Tenant',
       division_id: formData.division_id ? parseInt(formData.division_id) : null,
-      contract_type: formData.contract_type,
-      funding_mode: tenantSettings.is_funding_mode_enabled ? formData.funding_mode : 'Budgeted',
+      contract_type: formData.contract_type || 'Item Rate',
+      funding_mode: tenantSettings.is_funding_mode_enabled ? (formData.funding_mode || 'Budgeted') : 'Budgeted',
       client_id: formData.client_id ? parseInt(formData.client_id) : null,
       manager_id: formData.manager_id ? parseInt(formData.manager_id) : null,
-      location: formData.location.trim(),
+      location: formData.location ? formData.location.trim() : null,
       latitude: formData.latitude ? parseFloat(formData.latitude) : null,
       longitude: formData.longitude ? parseFloat(formData.longitude) : null,
-      start_date: new Date(formData.start_date).toISOString(),
-      end_date: new Date(formData.end_date).toISOString(),
-      budget: parseFloat(formData.budget),
+      start_date: formData.start_date ? new Date(formData.start_date).toISOString() : null,
+      end_date: formData.end_date ? new Date(formData.end_date).toISOString() : null,
+      budget: (formData.budget !== '' && !isNaN(parseFloat(formData.budget))) ? parseFloat(formData.budget) : 0,
       status: 'DRAFT'
     };
 
@@ -457,12 +486,24 @@ export default function Projects() {
 
       {/* --- CREATE PROJECT MODAL (PSC-01 IMPLEMENTATION) --- */}
       {showModal && !isSE && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-          <div className="glass-card" style={{ width: '100%', maxWidth: '780px', maxHeight: '90vh', overflowY: 'auto', background: '#1e293b', padding: '1.75rem', border: '1px solid rgba(255,255,255,0.12)' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div className="glass-card custom-modal-scroll" style={{ width: '100%', maxWidth: '820px', maxHeight: '90vh', overflowY: 'auto', overflowX: 'hidden', background: '#1e293b', padding: '1.75rem', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.7)' }}>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', pb: '0.75rem' }}>
-              <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.3rem' }}>Register Construction Project</h3>
-              <span className="tag-badge tag-warning" style={{ fontSize: '0.8rem', fontWeight: 700 }}>STATUS: DRAFT</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.85rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.3rem', fontWeight: 700 }}>Register Construction Project</h3>
+                <span className="tag-badge tag-warning" style={{ fontSize: '0.8rem', fontWeight: 700 }}>STATUS: DRAFT</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '6px', transition: 'all 0.2s' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#f8fafc'; e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                title="Close modal"
+              >
+                <X size={18} />
+              </button>
             </div>
 
             {submitError && (
@@ -474,13 +515,13 @@ export default function Projects() {
 
             <form onSubmit={handleCreateProjectSubmit}>
               {/* SECTION 1: PROJECT / CONTRACT DETAILS */}
-              <div style={{ background: 'rgba(15,23,42,0.4)', padding: '1rem', borderRadius: '8px', marginBottom: '1.25rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ background: 'rgba(15,23,42,0.4)', padding: '1.1rem', borderRadius: '8px', marginBottom: '1.25rem', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <h4 style={{ margin: '0 0 0.85rem 0', color: '#38bdf8', fontSize: '0.9rem', letterSpacing: '0.05em' }}>
                   1. PROJECT / CONTRACT DETAILS
                 </h4>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem', marginBottom: '0.85rem' }}>
-                  <div className="form-group" style={{ margin: 0 }}>
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                     <label style={{ fontSize: '0.82rem' }}>Project / Contract Name <span style={{ color: '#ef4444' }}>*</span></label>
                     <input
                       required
@@ -498,12 +539,12 @@ export default function Projects() {
                         ⚠️ {formErrors.name}
                       </span>
                     )}
-                    <span style={{ fontSize: '0.72rem', color: '#64748b', textAlign: 'right', display: 'block' }}>
+                    <span style={{ fontSize: '0.72rem', color: '#64748b', textAlign: 'right', display: 'block', marginTop: '0.2rem' }}>
                       {formData.name.length} / 120 chars
                     </span>
                   </div>
 
-                  <div className="form-group" style={{ margin: 0 }}>
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                     <label style={{ fontSize: '0.82rem' }}>Project Code <span style={{ color: '#ef4444' }}>*</span></label>
                     <input
                       required
@@ -513,12 +554,18 @@ export default function Projects() {
                       value={formData.code}
                       onChange={handleInputChange}
                       name="code"
+                      style={{ borderColor: formErrors.code ? '#ef4444' : undefined }}
                     />
+                    {formErrors.code && (
+                      <span style={{ color: '#fca5a5', fontSize: '0.78rem', marginTop: '0.25rem', display: 'block' }}>
+                        ⚠️ {formErrors.code}
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group" style={{ margin: 0 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '1rem' }}>
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                     <label style={{ fontSize: '0.82rem' }}>Tenant (System)</label>
                     <input
                       readOnly
@@ -530,10 +577,9 @@ export default function Projects() {
                     />
                   </div>
 
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label style={{ fontSize: '0.82rem' }}>Division / Circle <span style={{ color: '#ef4444' }}>*</span></label>
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
+                    <label style={{ fontSize: '0.82rem' }}>Division / Circle</label>
                     <select
-                      required
                       className="form-control"
                       name="division_id"
                       value={formData.division_id}
@@ -546,10 +592,9 @@ export default function Projects() {
                     </select>
                   </div>
 
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label style={{ fontSize: '0.82rem' }}>Contract Type <span style={{ color: '#ef4444' }}>*</span></label>
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
+                    <label style={{ fontSize: '0.82rem' }}>Contract Type</label>
                     <select
-                      required
                       className="form-control"
                       name="contract_type"
                       value={formData.contract_type}
@@ -557,15 +602,15 @@ export default function Projects() {
                     >
                       <option value="Item Rate">Item Rate (Default)</option>
                       <option value="Percentage Rate" disabled={!tenantSettings.is_p2_enabled}>
-                        Percentage Rate {!tenantSettings.is_p2_enabled ? '(Requires P2 Flag)' : ''}
+                        Percentage Rate {!tenantSettings.is_p2_enabled ? '(Locked)' : ''}
                       </option>
                       <option value="EPC" disabled={!tenantSettings.is_p2_enabled}>
-                        EPC {!tenantSettings.is_p2_enabled ? '(Requires P2 Flag)' : ''}
+                        EPC {!tenantSettings.is_p2_enabled ? '(Locked)' : ''}
                       </option>
                     </select>
                     {!tenantSettings.is_p2_enabled && (
-                      <span style={{ fontSize: '0.72rem', color: '#f59e0b', marginTop: '0.2rem', display: 'block' }}>
-                        ℹ️ Percentage Rate and EPC require tenant P2 feature to be enabled.
+                      <span style={{ fontSize: '0.72rem', color: '#f59e0b', marginTop: '0.3rem', display: 'block', lineHeight: '1.3' }}>
+                        ℹ️ Percentage Rate & EPC require tenant P2 feature.
                       </span>
                     )}
                   </div>
@@ -573,13 +618,13 @@ export default function Projects() {
               </div>
 
               {/* SECTION 2: PROJECT INFORMATION */}
-              <div style={{ background: 'rgba(15,23,42,0.4)', padding: '1rem', borderRadius: '8px', marginBottom: '1.25rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ background: 'rgba(15,23,42,0.4)', padding: '1.1rem', borderRadius: '8px', marginBottom: '1.25rem', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <h4 style={{ margin: '0 0 0.85rem 0', color: '#38bdf8', fontSize: '0.9rem', letterSpacing: '0.05em' }}>
                   2. PROJECT INFORMATION
                 </h4>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.85rem' }}>
-                  <div className="form-group" style={{ margin: 0 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1rem', marginBottom: '0.85rem' }}>
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                     <label style={{ fontSize: '0.82rem' }}>Client</label>
                     <select
                       className="form-control"
@@ -594,7 +639,7 @@ export default function Projects() {
                     </select>
                   </div>
 
-                  <div className="form-group" style={{ margin: 0 }}>
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                     <label style={{ fontSize: '0.82rem' }}>Project Manager</label>
                     <select
                       className="form-control"
@@ -613,10 +658,9 @@ export default function Projects() {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '1rem', marginBottom: '0.85rem' }}>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label style={{ fontSize: '0.82rem' }}>Site Location <span style={{ color: '#ef4444' }}>*</span></label>
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
+                    <label style={{ fontSize: '0.82rem' }}>Site Location</label>
                     <input
-                      required
                       type="text"
                       className="form-control"
                       placeholder="Financial District Plaza, Central Avenue"
@@ -626,7 +670,7 @@ export default function Projects() {
                     />
                   </div>
 
-                  <div className="form-group" style={{ margin: 0 }}>
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                     <label style={{ fontSize: '0.82rem' }}>Latitude (GPS Pin)</label>
                     <input
                       type="number"
@@ -639,7 +683,7 @@ export default function Projects() {
                     />
                   </div>
 
-                  <div className="form-group" style={{ margin: 0 }}>
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                     <label style={{ fontSize: '0.82rem' }}>Longitude (GPS Pin)</label>
                     <input
                       type="number"
@@ -653,14 +697,13 @@ export default function Projects() {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label style={{ fontSize: '0.82rem' }}>Estimated Contract Value ($) <span style={{ color: '#ef4444' }}>*</span></label>
+                <div style={{ display: 'grid', gridTemplateColumns: tenantSettings.is_funding_mode_enabled ? 'repeat(2, minmax(0, 1fr))' : '1fr', gap: '1rem' }}>
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
+                    <label style={{ fontSize: '0.82rem' }}>Estimated Contract Value ($)</label>
                     <input
-                      required
                       type="number"
                       step="0.01"
-                      min="0.01"
+                      min="0"
                       className="form-control"
                       placeholder="4500000.00"
                       value={formData.budget}
@@ -676,7 +719,7 @@ export default function Projects() {
                   </div>
 
                   {tenantSettings.is_funding_mode_enabled && (
-                    <div className="form-group" style={{ margin: 0 }}>
+                    <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                       <label style={{ fontSize: '0.82rem' }}>Funding Mode</label>
                       <select
                         className="form-control"
@@ -693,17 +736,16 @@ export default function Projects() {
                 </div>
               </div>
 
-              {/* SECTION 3: SCHEDULE */}
-              <div style={{ background: 'rgba(15,23,42,0.4)', padding: '1rem', borderRadius: '8px', marginBottom: '1.25rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+              {/* SECTION 3: SCHEDULE & DURATION */}
+              <div style={{ background: 'rgba(15,23,42,0.4)', padding: '1.1rem', borderRadius: '8px', marginBottom: '1.25rem', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <h4 style={{ margin: '0 0 0.85rem 0', color: '#38bdf8', fontSize: '0.9rem', letterSpacing: '0.05em' }}>
                   3. SCHEDULE & DURATION
                 </h4>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label style={{ fontSize: '0.82rem' }}>Start Date <span style={{ color: '#ef4444' }}>*</span></label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '1rem' }}>
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
+                    <label style={{ fontSize: '0.82rem' }}>Start Date</label>
                     <input
-                      required
                       type="date"
                       className="form-control"
                       value={formData.start_date}
@@ -717,10 +759,9 @@ export default function Projects() {
                     )}
                   </div>
 
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label style={{ fontSize: '0.82rem' }}>Scheduled Completion Date <span style={{ color: '#ef4444' }}>*</span></label>
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
+                    <label style={{ fontSize: '0.82rem' }}>Scheduled Completion Date</label>
                     <input
-                      required
                       type="date"
                       className="form-control"
                       value={formData.end_date}
@@ -735,7 +776,7 @@ export default function Projects() {
                     )}
                   </div>
 
-                  <div className="form-group" style={{ margin: 0 }}>
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                     <label style={{ fontSize: '0.82rem' }}>Contract Duration (Calculated)</label>
                     <input
                       readOnly
@@ -774,7 +815,7 @@ export default function Projects() {
       {showDivisionModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1050, padding: '1rem' }}>
           <div className="glass-card" style={{ width: '100%', maxWidth: '640px', background: '#1e293b', padding: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.08)', pb: '0.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.75rem' }}>
               <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.15rem' }}>Tenant Divisions & Circles</h3>
               <button className="btn btn-sm btn-secondary" onClick={() => setShowDivisionModal(false)}>Close</button>
             </div>
@@ -849,7 +890,7 @@ export default function Projects() {
       {showSettingsModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1050, padding: '1rem' }}>
           <div className="glass-card" style={{ width: '100%', maxWidth: '520px', background: '#1e293b', padding: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', pb: '0.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.75rem' }}>
               <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.15rem' }}>Tenant Feature Flags (PSC-01)</h3>
               <button className="btn btn-sm btn-secondary" onClick={() => setShowSettingsModal(false)}>Close</button>
             </div>

@@ -18,14 +18,15 @@ export const PROJECT_FLOW_PHASES = [
   {
     key: 'phase-1',
     phaseNumber: 'PHASE 1',
-    title: 'Project Creation',
+    title: 'PHASE 1: Project Creation',
     icon: HardHat,
     description: 'Statutory project inception, rate analysis, estimation & sanctions',
     items: [
       { label: 'Project / Contract Creation', path: '/projects', icon: HardHat, featureId: 'PSC-01' },
+      { label: 'BOQ / Master Line Items', path: '/boq-mb?tab=boq', icon: Layers, featureId: 'PSC-02' },
       { label: 'SOR / DSR Rate Database', path: '/sor', icon: Calculator, featureId: 'PSC-04' },
-      { label: 'Detailed Estimate', path: '/estimation', icon: DollarSign, featureId: 'PSC-05' },
       { label: 'Non-SOR Rate Analysis', path: '/non-sor-rate-analysis', icon: Calculator, featureId: 'PSC-06' },
+      { label: 'Detailed Estimate', path: '/estimation', icon: DollarSign, featureId: 'PSC-05' },
       { label: 'Technical Sanction', path: '/technical-sanction', icon: ShieldCheck, featureId: 'PSC-07' },
       { label: 'Contractor Awards', path: '/contractor-awards', icon: Award },
       { label: 'Work Orders', path: '/work-orders', icon: FileCheck },
@@ -34,21 +35,21 @@ export const PROJECT_FLOW_PHASES = [
   {
     key: 'phase-2',
     phaseNumber: 'PHASE 2',
-    title: 'Work Planning & Team',
+    title: 'PHASE 2: Work Planning',
     icon: Calendar,
     description: 'WBS hierarchy, BOQ linkage, milestones & team setup',
     items: [
       { label: 'Work Plan / WBS', path: '/wbs', icon: Layers, featureId: 'WPT-01' },
       { label: 'BOQ → Work Plan Mapping', path: '/work-plan', icon: Calendar, featureId: 'WPT-02' },
-      { label: 'Project Milestones', path: '/milestones', icon: Target, featureId: 'WPT-03' },
       { label: 'Project Team', path: '/project-team', icon: Users, featureId: 'WPT-04' },
       { label: 'Task Assignments', path: '/task-assignments', icon: UserCheck },
+      { label: 'Project Milestones', path: '/milestones', icon: Target, featureId: 'WPT-03' },
     ]
   },
   {
     key: 'phase-3',
     phaseNumber: 'PHASE 3',
-    title: 'Execution & Approvals',
+    title: 'PHASE 3: Field Execution',
     icon: ClipboardList,
     description: 'Field execution, digital e-MB, sampling & hindrance tracking',
     items: [
@@ -61,31 +62,29 @@ export const PROJECT_FLOW_PHASES = [
   {
     key: 'phase-4',
     phaseNumber: 'PHASE 4',
-    title: 'Progress & Visibility',
+    title: 'PHASE 4: Progress & Tracking',
     icon: LayoutDashboard,
     description: 'Executive dashboards, physical/financial progress & visual gallery',
     items: [
       { label: 'Unified Project Dashboard', path: '/', icon: LayoutDashboard, featureId: 'PRV-01' },
-      { label: 'Physical & Financial Progress', path: '/contractor-billing', icon: Calculator },
+      { label: 'Physical & Financial Progress', path: '/contractor-billing', icon: BarChart3 },
       { label: 'Photo Gallery', path: '/photo-gallery', icon: ImageIcon },
     ]
   },
   {
     key: 'phase-5',
     phaseNumber: 'PHASE 5',
-    title: 'Intelligence & Integration',
+    title: 'PHASE 5: AI & Analytics',
     icon: Sparkles,
-    description: 'Mobile field app, OCR analytics & external accounting sync',
+    description: 'Project intelligence, AI decision support & analytics',
     items: [
-      { label: 'Mobile App', path: '/mobile', icon: Smartphone, featureId: 'INT-05' },
-      { label: 'AI Analytics & OCR', path: '/ai-analytics', icon: Sparkles },
-      { label: 'Tally Accounting Sync', path: '/tally', icon: FileBarChart },
+      { label: 'AI / Analytics', path: '/ai-analytics', icon: Sparkles },
     ]
   },
   {
     key: 'other-admin',
     phaseNumber: 'OTHER',
-    title: 'Enterprise & Administration',
+    title: 'Enterprise Governance',
     icon: Settings,
     description: 'System governance, master assets, procurement & compliance',
     items: [
@@ -103,6 +102,8 @@ export const PROJECT_FLOW_PHASES = [
       { label: 'HSE Safety Incidents', path: '/hse', icon: ShieldCheck },
       { label: 'Quality Control Inspections', path: '/quality', icon: AlertOctagon },
       { label: 'Facility Management', path: '/facility', icon: Wrench },
+      { label: 'Mobile App', path: '/mobile', icon: Smartphone, featureId: 'INT-05' },
+      { label: 'Tally Accounting Sync', path: '/tally', icon: FileBarChart },
       { label: 'User Accounts', path: '/users', icon: UserCheck },
       { label: 'Roles & Permissions', path: '/roles-permissions', icon: UserCog },
       { label: 'Approval Authority', path: '/approval-authority', icon: Sliders },
@@ -115,10 +116,15 @@ export const PROJECT_FLOW_PHASES = [
 
 /**
  * Helper to determine which phase a route belongs to.
- * Ensures consistent phase detection across Desktop Sidebar and Mobile Navigation.
+ * Supports query parameters for tab-based sub-features (e.g. /boq-mb?tab=boq).
  */
-export function getPhaseKeyForPath(pathname) {
-  if (!pathname || pathname === '/') return 'phase-4';
+export function getPhaseKeyForPath(pathname, search = '') {
+  if (!pathname) return 'phase-4';
+
+  // Sub-feature query handling: BOQ Master tab belongs to Phase 1
+  if (pathname.startsWith('/boq-mb') && search.includes('tab=boq')) {
+    return 'phase-1';
+  }
   
   if (
     pathname.startsWith('/projects') || 
@@ -160,11 +166,7 @@ export function getPhaseKeyForPath(pathname) {
     return 'phase-4';
   }
 
-  if (
-    pathname.startsWith('/mobile') || 
-    pathname.startsWith('/ai-analytics') || 
-    pathname.startsWith('/tally')
-  ) {
+  if (pathname.startsWith('/ai-analytics')) {
     return 'phase-5';
   }
 

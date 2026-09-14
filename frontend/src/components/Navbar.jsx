@@ -138,15 +138,15 @@ export default function Navbar() {
 
       {/* Global Search */}
       <div className="search-box" ref={searchRef} style={{ position: 'relative' }}>
-        <Search size={16} color="var(--text-muted)" />
+        <Search size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onFocus={() => setIsSearchFocused(true)}
-          placeholder="Search projects, WBS tasks, BOQ, materials, invoices..."
+          placeholder="Search projects, WBS, BOQ, materials..."
         />
-        <kbd style={{ fontSize: '0.65rem', background: 'rgba(255,255,255,0.08)', color: 'var(--text-muted)', padding: '0.1rem 0.35rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+        <kbd style={{ fontSize: '0.65rem', background: 'rgba(255,255,255,0.08)', color: 'var(--text-muted)', padding: '0.15rem 0.4rem', borderRadius: '4px', border: '1px solid var(--border-color)', flexShrink: 0 }}>
           ⌘K
         </kbd>
 
@@ -208,7 +208,7 @@ export default function Navbar() {
       <div className="nav-actions">
         {/* DB Connection Status */}
         <div className={`badge-status ${dbStatus === 'connected' ? '' : 'tag-warning'}`}>
-          <span className="badge-dot"></span>
+          <span className="badge-dot" style={{ boxShadow: dbStatus === 'connected' ? '0 0 8px #34d399' : undefined }}></span>
           <span>{dbStatus === 'connected' ? 'MySQL Connected' : 'Database Standby'}</span>
         </div>
 
@@ -249,17 +249,23 @@ export default function Navbar() {
               <span
                 style={{
                   position: 'absolute',
-                  top: '-2px',
-                  right: '-2px',
-                  background: 'var(--accent-rose)',
+                  top: '-4px',
+                  right: '-4px',
+                  background: '#f43f5e',
                   color: 'white',
                   borderRadius: '9999px',
                   fontSize: '0.65rem',
-                  padding: '0.05rem 0.35rem',
-                  fontWeight: 800
+                  minWidth: '18px',
+                  height: '18px',
+                  padding: '0 4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 800,
+                  boxShadow: '0 0 0 2px #080e1e'
                 }}
               >
-                {unreadCount}
+                {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             )}
           </button>

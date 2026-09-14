@@ -181,13 +181,18 @@ def create_project(project_in: ProjectCreate, db: Session = Depends(get_db)):
     if existing_code:
         raise HTTPException(status_code=400, detail="Project with this Code already exists.")
 
-    # 4. Estimated Contract Value (budget) > 0
-    if project_in.budget <= 0:
-        raise HTTPException(status_code=400, detail="Estimated Contract Value must be greater than 0.")
+    # 4. Estimated Contract Value (budget >= 0 if provided)
+    budget_val = float(project_in.budget) if project_in.budget is not None else 0.0
+    if project_in.budget is not None and budget_val < 0:
+        raise HTTPException(status_code=400, detail="Estimated Contract Value cannot be negative.")
 
-    # 5. Scheduled Completion Date must be after Start Date
-    if project_in.end_date <= project_in.start_date:
-        raise HTTPException(status_code=400, detail="Scheduled Completion Date must be after Start Date.")
+    # 5. Scheduled Completion Date must be after Start Date (if both provided)
+    if project_in.start_date and project_in.end_date:
+        if project_in.end_date <= project_in.start_date:
+            raise HTTPException(status_code=400, detail="Scheduled Completion Date must be after Start Date.")
+        duration_days = max(0, (project_in.end_date - project_in.start_date).days)
+    else:
+        duration_days = 0
 
     # 6. Contract Type P2 Feature Flag check
     tenant_setting = get_or_create_tenant_setting(db, tenant_name)
@@ -210,10 +215,7 @@ def create_project(project_in: ProjectCreate, db: Session = Depends(get_db)):
     if not tenant_setting.is_funding_mode_enabled:
         funding_mode = "Budgeted"
 
-    # 9. Contract Duration calculation
-    duration_days = max(0, (project_in.end_date - project_in.start_date).days)
-
-    # 10. Every newly created project MUST enter DRAFT status
+    # 9. Every newly created project MUST enter DRAFT status
     status = "DRAFT"
 
     project = Project(
@@ -226,13 +228,13 @@ def create_project(project_in: ProjectCreate, db: Session = Depends(get_db)):
         funding_mode=funding_mode,
         client_id=project_in.client_id,
         manager_id=project_in.manager_id,
-        location=project_in.location.strip(),
+        location=project_in.location.strip() if project_in.location else None,
         latitude=project_in.latitude,
         longitude=project_in.longitude,
         start_date=project_in.start_date,
         end_date=project_in.end_date,
         contract_duration_days=duration_days,
-        budget=project_in.budget,
+        budget=budget_val,
         status=status
     )
     db.add(project)

@@ -411,13 +411,13 @@ class ProjectBase(BaseModel):
     funding_mode: Optional[str] = "Budgeted"
     client_id: Optional[int] = None
     manager_id: Optional[int] = None
-    location: str
+    location: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    start_date: datetime
-    end_date: datetime
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
     contract_duration_days: Optional[int] = 0
-    budget: float
+    budget: Optional[float] = 0.0
     status: Optional[str] = "DRAFT"
 
 class ProjectCreate(ProjectBase):
@@ -476,9 +476,9 @@ class WbsTaskResponse(WbsTaskBase):
 
 class ProjectResponse(ProjectBase):
     id: int
-    actual_cost: float
-    progress_pct: float
-    created_at: datetime
+    actual_cost: Optional[float] = 0.0
+    progress_pct: Optional[float] = 0.0
+    created_at: Optional[datetime] = None
     tasks: List[WbsTaskResponse] = []
 
     class Config:

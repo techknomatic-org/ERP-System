@@ -16,7 +16,7 @@ export default function Sidebar() {
 
   // Initialize open groups: active phase open, others compact
   const [openGroups, setOpenGroups] = useState(() => {
-    const activeKey = getPhaseKeyForPath(window.location.pathname);
+    const activeKey = getPhaseKeyForPath(window.location.pathname, window.location.search);
     return {
       'phase-1': activeKey === 'phase-1',
       'phase-2': activeKey === 'phase-2',
@@ -27,38 +27,26 @@ export default function Sidebar() {
     };
   });
 
-  // Auto-expand the phase that contains the current active route, collapsing others to keep navigation compact
+  // Auto-expand the phase that contains the current active route
   useEffect(() => {
-    const activePhaseKey = getPhaseKeyForPath(location.pathname);
+    const activePhaseKey = getPhaseKeyForPath(location.pathname, location.search);
     if (activePhaseKey) {
-      setOpenGroups({
-        'phase-1': activePhaseKey === 'phase-1',
-        'phase-2': activePhaseKey === 'phase-2',
-        'phase-3': activePhaseKey === 'phase-3',
-        'phase-4': activePhaseKey === 'phase-4',
-        'phase-5': activePhaseKey === 'phase-5',
-        'other-admin': activePhaseKey === 'other-admin'
-      });
+      setOpenGroups(prev => ({
+        ...prev,
+        [activePhaseKey]: true
+      }));
     }
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 
-  // Toggle expand/collapse of navigation groups (accordion mode)
+  // Toggle expand/collapse of navigation groups independently
   const toggleGroup = (key) => {
     if (isCollapsed) {
       setIsCollapsed(false);
     }
-    setOpenGroups(prev => {
-      const willOpen = !prev[key];
-      if (!willOpen) {
-        return { ...prev, [key]: false };
-      }
-      // Expand clicked phase, keeping other phases collapsed to keep navigation compact
-      const updated = {};
-      PROJECT_FLOW_PHASES.forEach(p => {
-        updated[p.key] = p.key === key;
-      });
-      return updated;
-    });
+    setOpenGroups(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
   };
 
   useEffect(() => {
@@ -115,7 +103,7 @@ export default function Sidebar() {
     );
   }
 
-  const sidebarWidth = isCollapsed ? '72px' : '264px';
+  const sidebarWidth = isCollapsed ? '72px' : '278px';
 
   // Phase color accents for enterprise visual polish
   const PHASE_COLORS = {
@@ -127,9 +115,43 @@ export default function Sidebar() {
     'other-admin': { badgeBg: 'rgba(148, 163, 184, 0.1)', badgeColor: '#94a3b8', border: '#64748b' }
   };
 
+  const isItemActive = (item) => {
+    if (item.path === '/boq-mb?tab=boq') {
+      return location.pathname === '/boq-mb' && location.search.includes('tab=boq');
+    }
+    if (item.path === '/boq-mb') {
+      return location.pathname === '/boq-mb' && !location.search.includes('tab=boq');
+    }
+    if (item.path === '/') {
+      return location.pathname === '/';
+    }
+    if (item.path === '/contractor-billing' && location.pathname === '/physical-financial-progress') {
+      return true;
+    }
+    if (item.path === '/projects' && location.pathname.startsWith('/projects/')) {
+      return true;
+    }
+    if (item.path === '/properties' && location.pathname.startsWith('/properties/')) {
+      return true;
+    }
+    if (item.path === '/units' && location.pathname.startsWith('/units/')) {
+      return true;
+    }
+    if (item.path === '/crm-leads' && location.pathname.startsWith('/crm/leads/')) {
+      return true;
+    }
+    if (item.path === '/bookings' && location.pathname.startsWith('/bookings/')) {
+      return true;
+    }
+    if (item.path === '/customers' && location.pathname.startsWith('/customers/')) {
+      return true;
+    }
+    return location.pathname === item.path;
+  };
+
   return (
     <aside
-      className="sidebar"
+      className="sidebar custom-modal-scroll"
       style={{
         width: sidebarWidth,
         transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -202,10 +224,7 @@ export default function Sidebar() {
             const isOpen = openGroups[phase.key] === true;
             const colors = PHASE_COLORS[phase.key] || PHASE_COLORS['other-admin'];
             const PhaseIcon = phase.icon;
-            const isPhaseActive = validItems.some(item => 
-              location.pathname === item.path || 
-              (item.path !== '/' && location.pathname.startsWith(item.path))
-            );
+            const isPhaseActive = validItems.some(item => isItemActive(item));
 
             return (
               <li key={phase.key} style={{ marginTop: isCollapsed ? '0.35rem' : '0.5rem', listStyle: 'none' }}>
@@ -248,7 +267,7 @@ export default function Sidebar() {
                         textOverflow: 'ellipsis', 
                         overflow: 'hidden',
                         letterSpacing: '-0.01em',
-                        fontSize: '0.82rem',
+                        fontSize: '0.78rem',
                         fontWeight: isPhaseActive ? 700 : 600,
                         color: isPhaseActive ? '#f8fafc' : '#cbd5e1'
                       }}>
@@ -295,22 +314,17 @@ export default function Sidebar() {
                     {validItems.map((item) => {
                       const Icon = item.icon;
                       const badge = item.badgeKey === 'pendingApprovals' && pendingCount > 0 ? pendingCount : null;
+                      const active = isItemActive(item);
 
                       return (
                         <li key={item.path + item.label} style={{ listStyle: 'none' }}>
                           <NavLink
                             to={item.path}
-                            end={item.path === '/'}
-                            className={({ isActive }) => {
-                              const isAliasActive = 
-                                (item.path === '/contractor-billing' && location.pathname === '/physical-financial-progress') ||
-                                (item.path === '/projects' && location.pathname.startsWith('/projects/'));
-                              return `nav-link ${isActive || isAliasActive ? 'active' : ''}`;
-                            }}
+                            className={`nav-link ${active ? 'active' : ''}`}
                             style={{
-                              padding: isCollapsed ? '0.55rem 0' : '0.45rem 0.65rem',
+                              padding: isCollapsed ? '0.5rem 0' : '0.42rem 0.55rem',
                               justifyContent: isCollapsed ? 'center' : 'flex-start',
-                              fontSize: '0.82rem',
+                              fontSize: '0.8rem',
                               margin: '0.1rem 0',
                               borderRadius: '6px'
                             }}
@@ -321,8 +335,8 @@ export default function Sidebar() {
                               <span style={{ 
                                 whiteSpace: 'nowrap', 
                                 overflow: 'hidden', 
-                                textOverflow: 'ellipsis',
-                                flex: 1
+                                textOverflow: 'ellipsis', 
+                                flex: 1 
                               }}>
                                 {item.label}
                               </span>
@@ -334,7 +348,7 @@ export default function Sidebar() {
                                   marginLeft: 'auto', 
                                   borderRadius: '9999px', 
                                   fontSize: '0.66rem', 
-                                  padding: '0.05rem 0.38rem',
+                                  padding: '0.05rem 0.38rem', 
                                   fontWeight: 700 
                                 }}
                               >
