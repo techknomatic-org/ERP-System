@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 from app.database import get_db
-from app.models import Customer, CrmLead, AuditLog
+from app.models import Customer, CrmLead, AuditLog, Project
 from app.schemas import CustomerCreate, CustomerResponse
 
 router = APIRouter(prefix="/api/customers", tags=["Customer Management"])
@@ -124,3 +124,23 @@ def update_customer(customer_id: int, cust_in: CustomerCreate, db: Session = Dep
     db.commit()
 
     return enrich_customer(cust)
+
+@router.delete("/{customer_id}")
+def delete_customer(customer_id: int, db: Session = Depends(get_db)):
+    cust = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not cust:
+        raise HTTPException(status_code=404, detail="Customer record not found")
+
+    in_use = db.query(Project).filter(Project.client_id == customer_id).first()
+    if in_use:
+        raise HTTPException(status_code=400, detail="This option is already in use and cannot be deleted.")
+
+    db.delete(cust)
+    db.commit()
+
+    audit = AuditLog(user_id=1, action="DELETE", entity_type="Customer", entity_id=customer_id, payload=f"Deleted Customer #{customer_id}: {cust.name}")
+    db.add(audit)
+    db.commit()
+
+    return {"message": "Customer deleted successfully"}
+

@@ -53,6 +53,7 @@ export const authService = {
   updateUserProfile: (userId, data) => api.put(`/auth/users/${userId}`, data),
   toggleUserStatus: (userId) => api.post(`/auth/users/${userId}/toggle-status`),
   resetUserPassword: (userId, newPassword) => api.post(`/auth/users/${userId}/reset-password`, { new_password: newPassword }),
+  deleteUser: (userId) => api.delete(`/auth/users/${userId}`),
 };
 
 export const dashboardService = {
@@ -90,6 +91,7 @@ export const customerService = {
   getCustomerById: (id) => api.get(`/customers/${id}`),
   createCustomer: (data) => api.post('/customers/', data),
   updateCustomer: (id, data) => api.put(`/customers/${id}`, data),
+  deleteCustomer: (id) => api.delete(`/customers/${id}`),
 };
 
 export const approvalService = {
@@ -196,8 +198,13 @@ export const projectService = {
   getDivisions: (activeOnly = true) => api.get('/projects/divisions', { params: { active_only: activeOnly } }),
   createDivision: (data) => api.post('/projects/divisions', data),
   toggleDivisionActive: (id, isActive = null) => api.put(`/projects/divisions/${id}/deactivate`, null, { params: { is_active: isActive } }),
+  deleteDivision: (id) => api.delete(`/projects/divisions/${id}`),
   getTenantSettings: () => api.get('/projects/tenant-settings'),
   updateTenantSettings: (data) => api.put('/projects/tenant-settings', data),
+  addMasterDataOption: (category, optionValue, optionLabel = null) => 
+    api.post('/projects/master-data/option', null, { params: { category, option_value: optionValue, option_label: optionLabel } }),
+  deleteMasterDataOption: (category, optionValue) => 
+    api.delete('/projects/master-data/option', { params: { category, option_value: optionValue } }),
 };
 
 export const wbsService = {

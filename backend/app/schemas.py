@@ -390,6 +390,8 @@ class TenantSettingResponse(BaseModel):
     is_funding_mode_enabled: bool
     ae_sampling_rate: float = 50.00
     ee_sampling_rate: float = 10.00
+    custom_funding_modes: Optional[str] = None
+    custom_currencies: Optional[str] = None
     updated_at: datetime
 
     class Config:
@@ -400,6 +402,8 @@ class TenantSettingUpdate(BaseModel):
     is_funding_mode_enabled: Optional[bool] = None
     ae_sampling_rate: Optional[float] = None
     ee_sampling_rate: Optional[float] = None
+    custom_funding_modes: Optional[str] = None
+    custom_currencies: Optional[str] = None
 
 class ProjectBase(BaseModel):
     name: str
@@ -409,6 +413,7 @@ class ProjectBase(BaseModel):
     division_name: Optional[str] = None
     contract_type: Optional[str] = "Item Rate"
     funding_mode: Optional[str] = "Budgeted"
+    currency: Optional[str] = "INR"
     client_id: Optional[int] = None
     manager_id: Optional[int] = None
     location: Optional[str] = None
@@ -479,6 +484,7 @@ class ProjectResponse(ProjectBase):
     actual_cost: Optional[float] = 0.0
     progress_pct: Optional[float] = 0.0
     created_at: Optional[datetime] = None
+    current_phase: Optional[str] = "PHASE 1 — PROJECT CREATION"
     tasks: List[WbsTaskResponse] = []
 
     class Config:

@@ -5,7 +5,8 @@ from typing import List, Optional
 from datetime import datetime, date
 
 from app.database import get_db
-from app.models import Project, Division, TenantSetting, ContractorBill, BoqItem, AuditLog, ProjectTeamMember
+from app.models import Project, Division, TenantSetting, ContractorBill, BoqItem, AuditLog, ProjectTeamMember, User
+from app.api.auth import get_current_user
 from app.schemas import (
     ProjectCreate, ProjectResponse,
     DivisionCreate, DivisionResponse,
@@ -13,6 +14,69 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/api/projects", tags=["Construction Project Master"])
+
+def derive_project_phase(project: Project, db: Session) -> str:
+    """Derives current project lifecycle phase from actual database state."""
+    is_draft = (project.status or '').upper() == 'DRAFT'
+    if is_draft:
+        return 'PHASE 1 — PROJECT CREATION'
+
+    # Check Phase 5: Intelligence & Integration
+    has_intelligence = False
+    try:
+        from app.models import TestCheckAssignment
+        has_intelligence = db.query(TestCheckAssignment).filter(
+            TestCheckAssignment.project_id == project.id,
+            TestCheckAssignment.risk_score > 1.0
+        ).first() is not None
+    except Exception:
+        has_intelligence = False
+
+    if has_intelligence:
+        return 'PHASE 5 — INTELLIGENCE & INTEGRATION'
+
+    prog = float(project.progress_pct or 0)
+    has_photos = False
+    try:
+        from app.models import SiteLogPhoto
+        has_photos = db.query(SiteLogPhoto).filter(SiteLogPhoto.project_id == project.id).first() is not None
+    except Exception:
+        pass
+
+    if prog > 0 or has_photos:
+        return 'PHASE 4 — PROGRESS & VISIBILITY'
+
+    has_site_logs = False
+    has_mb = False
+    has_hindrance = False
+    try:
+        from app.models import SiteDailyLog, MeasurementBook, Hindrance
+        has_site_logs = db.query(SiteDailyLog).filter(SiteDailyLog.project_id == project.id).first() is not None
+        has_mb = db.query(MeasurementBook).filter(MeasurementBook.project_id == project.id).first() is not None
+        has_hindrance = db.query(Hindrance).filter(Hindrance.project_id == project.id).first() is not None
+    except Exception:
+        pass
+
+    if has_site_logs or has_mb or has_hindrance:
+        return 'PHASE 3 — EXECUTION & APPROVALS'
+
+    has_wbs = False
+    has_work_plans = False
+    has_milestones = False
+    has_team = False
+    try:
+        from app.models import WbsTask, WorkPlan, ProjectMilestone, ProjectTeamMember
+        has_wbs = db.query(WbsTask).filter(WbsTask.project_id == project.id).first() is not None
+        has_work_plans = db.query(WorkPlan).filter(WorkPlan.project_id == project.id).first() is not None
+        has_milestones = db.query(ProjectMilestone).filter(ProjectMilestone.project_id == project.id).first() is not None
+        has_team = db.query(ProjectTeamMember).filter(ProjectTeamMember.project_id == project.id).first() is not None
+    except Exception:
+        pass
+
+    if has_wbs or has_work_plans or has_milestones or has_team:
+        return 'PHASE 2 — WORK PLANNING & TEAM'
+
+    return 'PHASE 1 — PROJECT CREATION'
 
 # Helper function to get or create tenant settings
 def get_or_create_tenant_setting(db: Session, tenant_name: str = "Default Tenant"):
@@ -113,14 +177,41 @@ def toggle_division_active(division_id: int, is_active: Optional[bool] = None, d
     db.refresh(div)
     return div
 
+@router.delete("/divisions/{division_id}")
+def delete_division(division_id: int, db: Session = Depends(get_db)):
+    div = db.query(Division).filter(Division.id == division_id).first()
+    if not div:
+        raise HTTPException(status_code=404, detail="Division not found")
+    in_use = db.query(Project).filter(Project.division_id == division_id).first()
+    if in_use:
+        raise HTTPException(status_code=400, detail="This option is already in use and cannot be deleted.")
+    db.delete(div)
+    db.commit()
+    return {"message": "Division deleted successfully"}
+
 # --- TENANT SETTINGS / FEATURE FLAGS ENDPOINTS ---
 
 @router.get("/tenant-settings", response_model=TenantSettingResponse)
+@router.get("/tenant-settings/", response_model=TenantSettingResponse)
 def get_tenant_settings(tenant_name: str = "Default Tenant", db: Session = Depends(get_db)):
     return get_or_create_tenant_setting(db, tenant_name)
 
 @router.put("/tenant-settings", response_model=TenantSettingResponse)
-def update_tenant_settings(setting_in: TenantSettingUpdate, tenant_name: str = "Default Tenant", db: Session = Depends(get_db)):
+@router.put("/tenant-settings/", response_model=TenantSettingResponse)
+def update_tenant_settings(
+    setting_in: TenantSettingUpdate, 
+    tenant_name: str = "Default Tenant", 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # RBAC: Only authorized tenant administrators can update feature flags
+    user_role = (current_user.role or "").lower()
+    if user_role not in ["admin", "administrator", "tenant_admin"]:
+        raise HTTPException(
+            status_code=403, 
+            detail="Forbidden: Only tenant administrators are authorized to modify feature flags and tenant settings."
+        )
+
     try:
         setting = get_or_create_tenant_setting(db, tenant_name)
         if isinstance(setting, TenantSetting):
@@ -132,12 +223,103 @@ def update_tenant_settings(setting_in: TenantSettingUpdate, tenant_name: str = "
                 setting.ae_sampling_rate = setting_in.ae_sampling_rate
             if setting_in.ee_sampling_rate is not None:
                 setting.ee_sampling_rate = setting_in.ee_sampling_rate
+            if setting_in.custom_funding_modes is not None:
+                setting.custom_funding_modes = setting_in.custom_funding_modes
+            if setting_in.custom_currencies is not None:
+                setting.custom_currencies = setting_in.custom_currencies
             db.commit()
             db.refresh(setting)
         return setting
     except Exception:
         db.rollback()
         return get_or_create_tenant_setting(db, tenant_name)
+
+@router.post("/master-data/option")
+def add_master_data_option(
+    category: str = Query(...), 
+    option_value: str = Query(...), 
+    option_label: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    val = option_value.strip()
+    if not val:
+        raise HTTPException(status_code=400, detail="Option value cannot be empty.")
+    setting = get_or_create_tenant_setting(db)
+    import json
+    if category == "funding_mode":
+        modes = []
+        if isinstance(setting, TenantSetting) and setting.custom_funding_modes:
+            try:
+                modes = json.loads(setting.custom_funding_modes)
+            except Exception:
+                modes = []
+        defaults = ["Budgeted", "Deposit", "CSSA"]
+        if any(m.lower() == val.lower() for m in modes) or any(d.lower() == val.lower() for d in defaults):
+            raise HTTPException(status_code=400, detail="This option already exists.")
+        modes.append(val)
+        setting.custom_funding_modes = json.dumps(modes)
+        db.commit()
+        return {"message": f"Funding mode '{val}' added successfully.", "options": modes}
+
+    elif category == "currency":
+        currs = []
+        if isinstance(setting, TenantSetting) and setting.custom_currencies:
+            try:
+                currs = json.loads(setting.custom_currencies)
+            except Exception:
+                currs = []
+        existing_codes = [c.get("code").lower() if isinstance(c, dict) else str(c).lower() for c in currs]
+        default_codes = ["inr", "usd", "eur", "gbp", "aed", "sar", "sgd", "aud", "cad", "jpy"]
+        if val.lower() in existing_codes or val.lower() in default_codes:
+            raise HTTPException(status_code=400, detail="This currency already exists.")
+        label = option_label or f"{val.upper()} — Custom Currency"
+        currs.append({"code": val.upper(), "symbol": val.upper(), "label": label})
+        setting.custom_currencies = json.dumps(currs)
+        db.commit()
+        return {"message": f"Currency '{val}' added successfully.", "options": currs}
+
+    raise HTTPException(status_code=400, detail=f"Unsupported master data category: {category}")
+
+@router.delete("/master-data/option")
+def delete_master_data_option(
+    category: str = Query(...), 
+    option_value: str = Query(...), 
+    db: Session = Depends(get_db)
+):
+    val = option_value.strip()
+    if category == "funding_mode":
+        in_use = db.query(Project).filter(func.lower(Project.funding_mode) == val.lower()).first()
+        if in_use:
+            raise HTTPException(status_code=400, detail="This option is already in use and cannot be deleted.")
+        setting = get_or_create_tenant_setting(db)
+        if isinstance(setting, TenantSetting) and setting.custom_funding_modes:
+            import json
+            try:
+                modes = json.loads(setting.custom_funding_modes)
+                modes = [m for m in modes if m.lower() != val.lower()]
+                setting.custom_funding_modes = json.dumps(modes)
+                db.commit()
+            except Exception:
+                pass
+        return {"message": f"Funding mode '{val}' removed successfully."}
+
+    elif category == "currency":
+        in_use = db.query(Project).filter(func.lower(Project.currency) == val.lower()).first()
+        if in_use:
+            raise HTTPException(status_code=400, detail="This option is already in use and cannot be deleted.")
+        setting = get_or_create_tenant_setting(db)
+        if isinstance(setting, TenantSetting) and setting.custom_currencies:
+            import json
+            try:
+                currs = json.loads(setting.custom_currencies)
+                currs = [c for c in currs if (c.get("code") if isinstance(c, dict) else str(c)).lower() != val.lower()]
+                setting.custom_currencies = json.dumps(currs)
+                db.commit()
+            except Exception:
+                pass
+        return {"message": f"Currency '{val}' removed successfully."}
+
+    raise HTTPException(status_code=400, detail=f"Unsupported master data category: {category}")
 
 # --- PROJECT ENDPOINTS ---
 
@@ -147,13 +329,17 @@ def list_projects(status: str = None, tenant_name: str = "Default Tenant", db: S
     query = db.query(Project)
     if status:
         query = query.filter(func.lower(Project.status) == status.lower())
-    return query.order_by(Project.created_at.desc()).all()
+    projects = query.order_by(Project.created_at.desc()).all()
+    for p in projects:
+        p.current_phase = derive_project_phase(p, db)
+    return projects
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 def get_project_by_id(project_id: int, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    project.current_phase = derive_project_phase(project, db)
     return project
 
 @router.post("", response_model=ProjectResponse)
@@ -226,6 +412,7 @@ def create_project(project_in: ProjectCreate, db: Session = Depends(get_db)):
         division_name=division_name,
         contract_type=contract_type,
         funding_mode=funding_mode,
+        currency=project_in.currency or "INR",
         client_id=project_in.client_id,
         manager_id=project_in.manager_id,
         location=project_in.location.strip() if project_in.location else None,
@@ -252,6 +439,7 @@ def create_project(project_in: ProjectCreate, db: Session = Depends(get_db)):
     db.add(audit)
     db.commit()
 
+    project.current_phase = "PHASE 1 — PROJECT CREATION"
     return project
 
 @router.put("/{project_id}", response_model=ProjectResponse)
@@ -365,6 +553,8 @@ def update_project(project_id: int, project_in: ProjectCreate, db: Session = Dep
     project.code = project_in.code.strip()
     project.contract_type = requested_contract_type
     project.funding_mode = project_in.funding_mode or project.funding_mode
+    if project_in.currency:
+        project.currency = project_in.currency
     project.client_id = project_in.client_id
     project.manager_id = project_in.manager_id
     project.location = project_in.location.strip()
@@ -389,4 +579,5 @@ def update_project(project_id: int, project_in: ProjectCreate, db: Session = Dep
     db.add(audit)
     db.commit()
 
+    project.current_phase = derive_project_phase(project, db)
     return project

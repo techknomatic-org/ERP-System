@@ -2,11 +2,11 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { 
   Building2, ChevronDown, ChevronRight, ChevronLeft, FileText,
-  Smartphone
+  Smartphone, HardHat
 } from 'lucide-react';
 import { approvalService } from '../services/api';
 import { ROLE_PERMITTED_ROUTES as ROLE_PERMITTED_PATHS } from '../config/roles';
-import { PROJECT_FLOW_PHASES, getPhaseKeyForPath } from '../config/navigation';
+import { PROJECT_FLOW_PHASES, getPhaseKeyForPath, PROJECT_CREATION_NAV_ITEM } from '../config/navigation';
 
 export default function Sidebar() {
   const location = useLocation();
@@ -217,6 +217,41 @@ export default function Sidebar() {
       {/* 5 Business Phases Navigation */}
       <nav style={{ paddingBottom: '2.5rem', flex: 1, padding: isCollapsed ? '0.5rem 0' : '0.5rem' }}>
         <ul className="nav-list" style={{ padding: 0, margin: 0 }}>
+          {/* PROJECT / CONTRACT CREATION - Separate Top-Level Entry above Phase 1 */}
+          {!isCollapsed && isPathAllowed(PROJECT_CREATION_NAV_ITEM.path) && (
+            <li style={{ listStyle: 'none', marginBottom: '0.65rem' }}>
+              <NavLink
+                to={PROJECT_CREATION_NAV_ITEM.path}
+                className={`nav-link ${isItemActive(PROJECT_CREATION_NAV_ITEM) ? 'active' : ''}`}
+                style={{
+                  padding: '0.52rem 0.65rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  letterSpacing: '0.01em',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.55rem',
+                  borderLeft: isItemActive(PROJECT_CREATION_NAV_ITEM) ? '3px solid #38bdf8' : '3px solid transparent',
+                  background: isItemActive(PROJECT_CREATION_NAV_ITEM) ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <HardHat size={16} color="#38bdf8" style={{ flexShrink: 0 }} />
+                <span style={{ 
+                  whiteSpace: 'nowrap', 
+                  overflow: 'hidden', 
+                  textOverflow: 'ellipsis', 
+                  flex: 1,
+                  color: isItemActive(PROJECT_CREATION_NAV_ITEM) ? '#f8fafc' : '#cbd5e1',
+                  fontWeight: 700
+                }}>
+                  {PROJECT_CREATION_NAV_ITEM.label.toUpperCase()}
+                </span>
+              </NavLink>
+            </li>
+          )}
+
           {PROJECT_FLOW_PHASES.map((phase) => {
             const validItems = phase.items.filter(item => isPathAllowed(item.path));
             if (validItems.length === 0) return null;
@@ -224,13 +259,30 @@ export default function Sidebar() {
             const isOpen = openGroups[phase.key] === true;
             const colors = PHASE_COLORS[phase.key] || PHASE_COLORS['other-admin'];
             const PhaseIcon = phase.icon;
-            const isPhaseActive = validItems.some(item => isItemActive(item));
+            const isPhaseActive = validItems.some(item => isItemActive(item)) ||
+              (phase.key === 'phase-1' && (location.pathname === '/projects' || location.pathname.startsWith('/projects/')));
+
+            const handlePhaseClick = () => {
+              if (isCollapsed) {
+                setIsCollapsed(false);
+                setOpenGroups(prev => ({
+                  ...prev,
+                  [phase.key]: true
+                }));
+              } else {
+                toggleGroup(phase.key);
+              }
+            };
 
             return (
-              <li key={phase.key} style={{ marginTop: isCollapsed ? '0.35rem' : '0.5rem', listStyle: 'none' }}>
+              <li key={phase.key} style={{ marginTop: isCollapsed ? '0.25rem' : '0.45rem', listStyle: 'none' }}>
+                {isCollapsed && phase.key === 'other-admin' && (
+                  <div style={{ height: '1px', background: 'rgba(255,255,255,0.08)', margin: '0.45rem 0.5rem' }} />
+                )}
+
                 {!isCollapsed ? (
                   <div
-                    onClick={() => toggleGroup(phase.key)}
+                    onClick={handlePhaseClick}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -280,35 +332,38 @@ export default function Sidebar() {
                   </div>
                 ) : (
                   <div 
-                    onClick={() => toggleGroup(phase.key)}
+                    onClick={handlePhaseClick}
                     style={{ 
                       display: 'flex', 
                       flexDirection: 'column', 
                       alignItems: 'center', 
-                      margin: '0.35rem 0',
+                      margin: '0.25rem 0',
                       cursor: 'pointer',
-                      padding: '0.4rem',
-                      borderRadius: '6px',
-                      background: isPhaseActive ? colors.badgeBg : 'transparent'
+                      padding: '0.55rem 0.4rem',
+                      borderRadius: '8px',
+                      background: isPhaseActive ? colors.badgeBg : 'transparent',
+                      border: isPhaseActive ? `1px solid ${colors.border}` : '1px solid transparent',
+                      transition: 'all 0.2s ease'
                     }}
                     title={phase.title}
                   >
                     {PhaseIcon ? (
-                      <PhaseIcon size={18} color={isPhaseActive ? colors.badgeColor : '#94a3b8'} />
+                      <PhaseIcon size={20} color={isPhaseActive ? colors.badgeColor : '#94a3b8'} />
                     ) : (
                       <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: colors.badgeColor }} />
                     )}
                   </div>
                 )}
 
-                {(isOpen || isCollapsed) && (
+                {/* Only render child navigation items when sidebar is EXPANDED and phase is OPEN */}
+                {!isCollapsed && isOpen && (
                   <ul 
                     style={{ 
                       listStyle: 'none', 
-                      paddingLeft: isCollapsed ? 0 : '0.5rem', 
+                      paddingLeft: '0.5rem', 
                       margin: '0.2rem 0 0 0',
-                      borderLeft: (!isCollapsed && isOpen) ? '1px solid rgba(255,255,255,0.05)' : 'none',
-                      marginLeft: isCollapsed ? 0 : '0.75rem'
+                      borderLeft: '1px solid rgba(255,255,255,0.05)',
+                      marginLeft: '0.75rem'
                     }}
                   >
                     {validItems.map((item) => {
@@ -322,26 +377,23 @@ export default function Sidebar() {
                             to={item.path}
                             className={`nav-link ${active ? 'active' : ''}`}
                             style={{
-                              padding: isCollapsed ? '0.5rem 0' : '0.42rem 0.55rem',
-                              justifyContent: isCollapsed ? 'center' : 'flex-start',
+                              padding: '0.42rem 0.55rem',
+                              justifyContent: 'flex-start',
                               fontSize: '0.8rem',
                               margin: '0.1rem 0',
                               borderRadius: '6px'
                             }}
-                            title={isCollapsed ? item.label : undefined}
                           >
                             <Icon size={16} style={{ flexShrink: 0 }} />
-                            {!isCollapsed && (
-                              <span style={{ 
-                                whiteSpace: 'nowrap', 
-                                overflow: 'hidden', 
-                                textOverflow: 'ellipsis', 
-                                flex: 1 
-                              }}>
-                                {item.label}
-                              </span>
-                            )}
-                            {!isCollapsed && badge && (
+                            <span style={{ 
+                              whiteSpace: 'nowrap', 
+                              overflow: 'hidden', 
+                              textOverflow: 'ellipsis', 
+                              flex: 1 
+                            }}>
+                              {item.label}
+                            </span>
+                            {badge && (
                               <span 
                                 className="tag-badge tag-warning" 
                                 style={{ 

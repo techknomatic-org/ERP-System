@@ -337,6 +337,8 @@ class TenantSetting(Base):
     ae_sampling_rate = Column(Numeric(5, 2), default=50.00, nullable=False)
     ee_sampling_rate = Column(Numeric(5, 2), default=10.00, nullable=False)
     max_file_upload_mb = Column(Integer, default=10, nullable=False)
+    custom_funding_modes = Column(Text, nullable=True)
+    custom_currencies = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class Project(Base):
@@ -350,6 +352,7 @@ class Project(Base):
     division_name = Column(String(100), nullable=True)
     contract_type = Column(String(50), default="Item Rate", nullable=False)
     funding_mode = Column(String(50), default="Budgeted", nullable=False)
+    currency = Column(String(10), default="INR", nullable=True)
     client_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
     manager_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     location = Column(String(255), nullable=True)

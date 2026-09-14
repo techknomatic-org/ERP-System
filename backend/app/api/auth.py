@@ -6,7 +6,7 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from datetime import datetime
 from app.database import get_db
-from app.models import User, Customer
+from app.models import User, Customer, Project
 from app.schemas import UserCreate, UserResponse, TokenResponse
 from app.api.audit import record_audit_log
 
@@ -309,3 +309,27 @@ def reset_user_password(user_id: int, req: PasswordReset, db: Session = Depends(
     )
 
     return {"message": f"Password reset successfully for {user.username}"}
+
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User account not found")
+
+    in_use = db.query(Project).filter(Project.manager_id == user_id).first()
+    if in_use:
+        raise HTTPException(status_code=400, detail="This option is already in use and cannot be deleted.")
+
+    db.delete(user)
+    db.commit()
+
+    record_audit_log(
+        db=db,
+        user_id=1,
+        action="DELETE_USER",
+        entity_type="User",
+        entity_id=user_id,
+        payload=f"User #{user_id} ({user.username}) was deleted by Admin"
+    )
+
+    return {"message": "User deleted successfully"}

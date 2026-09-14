@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Bell, User, ChevronDown, LogOut, HardHat, Package, FileText, Layers, X, Smartphone, Menu, ChevronRight } from 'lucide-react';
 import { systemService, notificationService } from '../services/api';
-import { PROJECT_FLOW_PHASES } from '../config/navigation';
+import { PROJECT_FLOW_PHASES, PROJECT_CREATION_NAV_ITEM } from '../config/navigation';
 import { ROLE_PERMITTED_ROUTES as ROLE_PERMITTED_PATHS } from '../config/roles';
 
 export default function Navbar() {
@@ -449,6 +449,32 @@ export default function Navbar() {
 
             {/* Phases List */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem' }}>
+              {isPathAllowed(PROJECT_CREATION_NAV_ITEM.path) && (
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <div
+                    onClick={() => {
+                      navigate(PROJECT_CREATION_NAV_ITEM.path);
+                      setIsMobileNavOpen(false);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '0.5rem 0.65rem',
+                      background: location.pathname === '/projects' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                      borderLeft: location.pathname === '/projects' ? '3px solid #38bdf8' : '3px solid transparent',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      color: location.pathname === '/projects' ? '#38bdf8' : '#f8fafc'
+                    }}
+                  >
+                    <HardHat size={16} color="#38bdf8" />
+                    <span>PROJECT / CONTRACT CREATION</span>
+                  </div>
+                </div>
+              )}
               {PROJECT_FLOW_PHASES.map((phase) => {
                 const validItems = phase.items.filter(item => isPathAllowed(item.path));
                 if (validItems.length === 0) return null;

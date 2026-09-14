@@ -14,6 +14,13 @@ import {
  * Centralized, shared navigation hierarchy for Desktop Sidebar & Mobile Drawer.
  * Structured into 5 primary business phases plus an Enterprise & Administration group.
  */
+export const PROJECT_CREATION_NAV_ITEM = { 
+  label: 'Project / Contract Creation', 
+  path: '/projects', 
+  icon: HardHat, 
+  featureId: 'PSC-01' 
+};
+
 export const PROJECT_FLOW_PHASES = [
   {
     key: 'phase-1',
@@ -22,7 +29,6 @@ export const PROJECT_FLOW_PHASES = [
     icon: HardHat,
     description: 'Statutory project inception, rate analysis, estimation & sanctions',
     items: [
-      { label: 'Project / Contract Creation', path: '/projects', icon: HardHat, featureId: 'PSC-01' },
       { label: 'BOQ / Master Line Items', path: '/boq-mb?tab=boq', icon: Layers, featureId: 'PSC-02' },
       { label: 'SOR / DSR Rate Database', path: '/sor', icon: Calculator, featureId: 'PSC-04' },
       { label: 'Non-SOR Rate Analysis', path: '/non-sor-rate-analysis', icon: Calculator, featureId: 'PSC-06' },
