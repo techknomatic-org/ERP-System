@@ -6,6 +6,7 @@ import {
   FileText, CheckSquare, X, Edit3, ShieldAlert, ShieldCheck, Loader2
 } from 'lucide-react';
 import { aiService, projectService } from '../services/api';
+import { getActiveProjectId } from '../utils/activeProject';
 
 // Helper Function to Normalize any Response Data Type safely into formatted text
 function normalizeResponseToText(data) {
@@ -177,7 +178,16 @@ export default function AiAnalytics() {
     ])
       .then(([insightsRes, projRes]) => {
         setInsights(insightsRes.data);
-        setProjects(projRes.data || []);
+        const pList = projRes.data || [];
+        setProjects(pList);
+        const activeId = getActiveProjectId(pList);
+        const activeProj = pList.find(p => String(p.id) === String(activeId));
+        if (activeProj) {
+          setEditForm(prev => ({
+            ...prev,
+            project_name: activeProj.name
+          }));
+        }
       })
       .catch((err) => console.error("Error loading AI analytics data:", err))
       .finally(() => setLoading(false));

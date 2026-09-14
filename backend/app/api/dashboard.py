@@ -487,14 +487,15 @@ def get_user_projects(
     db: Session = Depends(get_db)
 ):
     """
-    Returns all projects accessible to the user, identifying the default (most-recently active) project.
+    Returns all active demo projects accessible to the user, identifying the default project.
     """
-    projects = db.query(Project).order_by(Project.id.desc()).all()
+    projects = db.query(Project).filter(Project.is_active == True).order_by(Project.id.asc()).all()
     if not projects:
         return {"projects": [], "default_project_id": None}
 
+    metro_proj = next((p for p in projects if p.id == 29), None)
     active_projects = [p for p in projects if (p.status or '').upper() in ['ACTIVE', 'IN_PROGRESS']]
-    default_proj = active_projects[0] if active_projects else projects[0]
+    default_proj = metro_proj or (active_projects[0] if active_projects else projects[0])
 
     project_list = []
     for p in projects:

@@ -6,6 +6,7 @@ import {
   Layers, ArrowUpRight, History, FileText, Check, X, RefreshCw, UserPlus, Send, AlertTriangle
 } from 'lucide-react';
 import { projectService, projectTeamService } from '../services/api';
+import { getActiveProjectId, setActiveProjectId } from '../utils/activeProject';
 
 const CONTROLLED_ROLES = [
   "Contractor PM",
@@ -50,7 +51,7 @@ export default function ProjectTeam() {
 
   // Core Data States
   const [projects, setProjects] = useState([]);
-  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState(getActiveProjectId() || '');
   const [teamData, setTeamData] = useState({ summary: {}, members: [] });
   const [eligibleUsers, setEligibleUsers] = useState([]);
   
@@ -120,9 +121,9 @@ export default function ProjectTeam() {
       setProjects(projList);
       setEligibleUsers(usersRes.data || []);
 
-      if (projList.length > 0) {
-        const defaultProj = projList.find(p => (p.name || '').includes('Greenfield')) || projList[0];
-        setSelectedProjectId(defaultProj.id.toString());
+      const activeId = getActiveProjectId(projList);
+      if (activeId) {
+        setSelectedProjectId(activeId);
       }
     } catch (err) {
       console.error("Failed to load initial projects or users:", err);
@@ -546,7 +547,11 @@ export default function ProjectTeam() {
 
         <select
           value={selectedProjectId}
-          onChange={(e) => setSelectedProjectId(e.target.value)}
+          onChange={(e) => {
+            const val = e.target.value;
+            setSelectedProjectId(val);
+            setActiveProjectId(val);
+          }}
           style={{
             background: '#0f172a',
             border: '1px solid rgba(255, 255, 255, 0.15)',

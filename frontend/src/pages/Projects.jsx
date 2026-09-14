@@ -6,6 +6,7 @@ import {
   Trash2, User, Coins, Check, RotateCcw, ShieldCheck
 } from 'lucide-react';
 import { projectService, customerService, authService } from '../services/api';
+import { setActiveProjectId } from '../utils/activeProject';
 
 export const STANDARD_CURRENCIES = [
   { code: 'INR', symbol: '₹', label: 'INR — Indian Rupee (₹)', locale: 'en-IN' },
@@ -827,7 +828,10 @@ export default function Projects() {
                       gap: '0.4rem',
                       background: isSE ? 'linear-gradient(135deg, #10b981, #059669)' : undefined
                     }}
-                    onClick={() => navigate(`/projects/${p.id}`)}
+                    onClick={() => {
+                      setActiveProjectId(p.id);
+                      navigate(`/projects/${p.id}`);
+                    }}
                   >
                     <span>{isSE ? "Open Site" : "Open Project"}</span> <ArrowRight size={15} />
                   </button>

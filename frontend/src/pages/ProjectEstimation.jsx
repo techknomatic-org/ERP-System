@@ -4,11 +4,12 @@ import {
   CheckCircle, AlertCircle, RefreshCw, FileSpreadsheet, Building2, Check, Layers, ChevronRight, Lock, FileCheck, Copy, ShieldCheck, XCircle
 } from 'lucide-react';
 import { projectService, sorService, estimationService, nonSorService, technicalSanctionService } from '../services/api';
+import { getActiveProjectId, setActiveProjectId } from '../utils/activeProject';
 import EmptyState from '../components/EmptyState';
 
 export default function ProjectEstimation() {
   const [projects, setProjects] = useState([]);
-  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState(getActiveProjectId() || '');
   const [loadingProjects, setLoadingProjects] = useState(true);
 
   // Active SOR Items for Dropdown
@@ -101,10 +102,12 @@ export default function ProjectEstimation() {
       sorService.getSorItems()
     ])
       .then(([projRes, sorRes]) => {
-        setProjects(projRes.data || []);
+        const prjs = projRes.data || [];
+        setProjects(prjs);
         setSorMasterList(sorRes.data || []);
-        if (projRes.data && projRes.data.length > 0) {
-          setSelectedProjectId(projRes.data[0].id.toString());
+        const activeId = getActiveProjectId(prjs);
+        if (activeId) {
+          setSelectedProjectId(activeId);
         }
       })
       .catch((err) => {
@@ -879,7 +882,11 @@ export default function ProjectEstimation() {
             <select 
               className="form-control"
               value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedProjectId(val);
+                setActiveProjectId(val);
+              }}
               style={{ fontWeight: 600, cursor: 'pointer' }}
             >
               <option value="">-- Select Project --</option>

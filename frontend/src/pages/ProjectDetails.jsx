@@ -6,6 +6,7 @@ import {
   Calculator, FileText, FileBarChart, Users, AlertTriangle, UserCheck, Plus, ChevronRight, Sparkles
 } from 'lucide-react';
 import { projectService, authService } from '../services/api';
+import { setActiveProjectId } from '../utils/activeProject';
 
 export default function ProjectDetails() {
   const { id } = useParams();
@@ -35,7 +36,12 @@ export default function ProjectDetails() {
     setLoading(true);
     
     projectService.getProjectById(id)
-      .then((res) => setProject(res.data))
+      .then((res) => {
+        setProject(res.data);
+        if (res.data?.id) {
+          setActiveProjectId(res.data.id);
+        }
+      })
       .catch((err) => console.error("Error loading project details:", err));
 
     authService.getUsers()

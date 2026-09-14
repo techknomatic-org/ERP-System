@@ -5,10 +5,11 @@ import {
   Calendar, Layers, Edit, Trash2, XCircle, RefreshCw, Check, ArrowRight, Info
 } from 'lucide-react';
 import { milestoneService, projectService, wbsService } from '../services/api';
+import { getActiveProjectId, setActiveProjectId } from '../utils/activeProject';
 
 export default function Milestones() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialProjectId = searchParams.get('project_id') || '';
+  const initialProjectId = searchParams.get('project_id') || searchParams.get('projectId') || getActiveProjectId() || '';
 
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId);
@@ -63,8 +64,9 @@ export default function Milestones() {
       const res = await projectService.getProjects();
       const list = Array.isArray(res.data) ? res.data : (res.data?.projects || []);
       setProjects(list);
-      if (!selectedProjectId && list.length > 0) {
-        setSelectedProjectId(list[0].id.toString());
+      const activeId = initialProjectId || getActiveProjectId(list);
+      if (activeId) {
+        setSelectedProjectId(activeId);
       }
     } catch (err) {
       console.error("Failed to load projects:", err);
@@ -392,7 +394,11 @@ export default function Milestones() {
             <label style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.25rem' }}>Project</label>
             <select
               value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedProjectId(val);
+                setActiveProjectId(val);
+              }}
               style={{ width: '100%', background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', padding: '0.45rem 0.65rem', color: '#f8fafc', fontSize: '0.85rem' }}
             >
               <option value="">[ All Projects ]</option>

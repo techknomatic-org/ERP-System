@@ -32,7 +32,7 @@ def get_eligible_awards_for_wo(db: Session = Depends(get_db)):
         ).first()
 
         if not existing_wo:
-            proj = db.query(Project).filter(Project.id == award.project_id).first()
+            proj = db.query(Project).filter(Project.id == award.project_id, Project.is_active == True).first()
             vendor = db.query(Vendor).filter(Vendor.id == award.contractor_id).first()
             if proj and vendor:
                 eligible.append(EligibleAwardForWO(

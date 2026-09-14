@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { HardHat, Plus, Camera, Upload, CheckCircle2, Clock, AlertCircle, ArrowLeft, Layers, CheckSquare, X, Image as ImageIcon, Trash2, Filter, Eye, User, Calendar, Tag, Activity, CalendarDays, AlertTriangle } from 'lucide-react';
 import { projectService, siteLogService, boqMbService, authService, workPlanService, getFileUrl } from '../services/api';
+import { getActiveProjectId, setActiveProjectId } from '../utils/activeProject';
 
 const getImageUrl = (filePath) => getFileUrl(filePath);
 
@@ -26,7 +27,7 @@ export default function SiteLogs() {
 
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
-  const [selectedProjectId, setSelectedProjectId] = useState(urlProjectId || '');
+  const [selectedProjectId, setSelectedProjectId] = useState(urlProjectId || getActiveProjectId() || '');
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -84,8 +85,9 @@ export default function SiteLogs() {
       .then((res) => {
         const prjs = res.data || [];
         setProjects(prjs);
-        if (!selectedProjectId && prjs.length > 0) {
-          setSelectedProjectId(prjs[0].id.toString());
+        const activeId = urlProjectId || getActiveProjectId(prjs);
+        if (activeId) {
+          setSelectedProjectId(activeId);
         }
       })
       .catch((err) => console.error("Error loading projects:", err));
@@ -439,7 +441,11 @@ export default function SiteLogs() {
           <p className="page-subtitle">Site Engineer daily progress, site photo evidence, labour, equipment & BOQ execution tracking</p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          <select className="form-control" style={{ width: '260px' }} value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
+          <select className="form-control" style={{ width: '260px' }} value={selectedProjectId} onChange={e => {
+            const val = e.target.value;
+            setSelectedProjectId(val);
+            setActiveProjectId(val);
+          }}>
             {projects.map(p => (
               <option key={p.id} value={p.id}>{p.code}: {p.name}</option>
             ))}

@@ -424,6 +424,7 @@ class ProjectBase(BaseModel):
     contract_duration_days: Optional[int] = 0
     budget: Optional[float] = 0.0
     status: Optional[str] = "DRAFT"
+    is_active: Optional[bool] = True
 
 class ProjectCreate(ProjectBase):
     pass

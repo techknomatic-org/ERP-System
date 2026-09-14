@@ -4,11 +4,14 @@ import {
   Plus, Search, Filter, AlertCircle, CheckCircle, Clock, XCircle, ChevronRight, 
   Calendar, Info, RefreshCw, Eye, Edit, Send, Check, Printer, FileText, Layers, ArrowUpRight
 } from 'lucide-react';
-import { workOrderService, wbsService } from '../services/api';
+import { workOrderService, wbsService, projectService } from '../services/api';
+import { getActiveProjectId, setActiveProjectId } from '../utils/activeProject';
 
 export default function WorkOrders() {
   const [workOrders, setWorkOrders] = useState([]);
   const [eligibleAwards, setEligibleAwards] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [selectedProjectId, setSelectedProjectId] = useState(getActiveProjectId() || '');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
@@ -52,17 +55,28 @@ export default function WorkOrders() {
   const printRef = useRef(null);
 
   // Fetch initial data
-  const fetchData = async () => {
+  const fetchData = async (projId = selectedProjectId) => {
     setLoading(true);
     setError(null);
     try {
-      const [woRes, eligibleRes] = await Promise.all([
-        workOrderService.getWorkOrders(),
-        workOrderService.getEligibleAwards()
+      const woParams = projId ? { project_id: projId } : {};
+      const [woRes, eligibleRes, projRes] = await Promise.all([
+        workOrderService.getWorkOrders(woParams),
+        workOrderService.getEligibleAwards(),
+        projectService.getProjects()
       ]);
 
       setWorkOrders(woRes.data || []);
       setEligibleAwards(eligibleRes.data || []);
+      const projList = Array.isArray(projRes.data) ? projRes.data : (projRes.data?.data || []);
+      setProjects(projList);
+
+      if (!projId) {
+        const activeId = getActiveProjectId(projList);
+        if (activeId) {
+          setSelectedProjectId(activeId);
+        }
+      }
     } catch (err) {
       console.error("Failed to load work orders data:", err);
       setError(err.response?.data?.detail || "Failed to load work orders data");
@@ -75,13 +89,30 @@ export default function WorkOrders() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    const handleActiveProjectChange = (e) => {
+      const newId = e.detail?.projectId;
+      if (newId && String(newId) !== String(selectedProjectId)) {
+        setSelectedProjectId(newId);
+        fetchData(newId);
+      }
+    };
+    window.addEventListener('active_project_changed', handleActiveProjectChange);
+    return () => window.removeEventListener('active_project_changed', handleActiveProjectChange);
+  }, [selectedProjectId]);
+
   // Calculate top summary KPI metrics
   const summaryMetrics = useMemo(() => {
-    const readyCount = eligibleAwards.length;
-    const draftCount = workOrders.filter(w => w.status === 'DRAFT').length;
-    const issuedCount = workOrders.filter(w => w.status === 'ISSUED').length;
-    const activeCount = workOrders.filter(w => w.status === 'ACTIVE').length;
-    const totalWOValue = workOrders
+    const relevantWOs = selectedProjectId
+      ? workOrders.filter(w => String(w.project_id) === String(selectedProjectId))
+      : workOrders;
+    const readyCount = selectedProjectId
+      ? eligibleAwards.filter(a => String(a.project_id) === String(selectedProjectId)).length
+      : eligibleAwards.length;
+    const draftCount = relevantWOs.filter(w => w.status === 'DRAFT').length;
+    const issuedCount = relevantWOs.filter(w => w.status === 'ISSUED').length;
+    const activeCount = relevantWOs.filter(w => w.status === 'ACTIVE').length;
+    const totalWOValue = relevantWOs
       .filter(w => ['ISSUED', 'ACTIVE', 'COMPLETED'].includes(w.status))
       .reduce((sum, w) => sum + (parseFloat(w.work_order_value) || 0), 0);
 
@@ -92,7 +123,7 @@ export default function WorkOrders() {
       activeCount,
       totalWOValue
     };
-  }, [workOrders, eligibleAwards]);
+  }, [workOrders, eligibleAwards, selectedProjectId]);
 
   // Format currency in INR
   const formatINR = (val) => {
@@ -136,7 +167,8 @@ export default function WorkOrders() {
     setEditingWOId(null);
     setFormErrors({});
 
-    const initialAward = eligibleAwards.length > 0 ? eligibleAwards[0] : null;
+    const matchedAward = eligibleAwards.find(a => String(a.project_id) === String(selectedProjectId));
+    const initialAward = matchedAward || (eligibleAwards.length > 0 ? eligibleAwards[0] : null);
 
     setFormData({
       award_id: initialAward ? initialAward.award_id.toString() : '',
@@ -451,9 +483,10 @@ export default function WorkOrders() {
       );
 
       const matchesStatus = statusFilter === 'ALL' || wo.status === statusFilter;
-      return matchesQuery && matchesStatus;
+      const matchesProject = !selectedProjectId || String(wo.project_id) === String(selectedProjectId);
+      return matchesQuery && matchesStatus && matchesProject;
     });
-  }, [workOrders, searchQuery, statusFilter]);
+  }, [workOrders, searchQuery, statusFilter, selectedProjectId]);
 
   // Helper for Status Badge styling
   const renderStatusBadge = (status) => {
@@ -582,8 +615,29 @@ export default function WorkOrders() {
 
       {/* Filter and Search Bar */}
       <div style={{ background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '1rem', marginBottom: '1.25rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', flex: 1, minWidth: '280px' }}>
-          <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', flex: 1, minWidth: '320px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#0f172a', padding: '0.4rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', flex: '1 1 240px' }}>
+            <Building2 size={16} style={{ color: '#38bdf8', flexShrink: 0 }} />
+            <select
+              value={selectedProjectId}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedProjectId(val);
+                setActiveProjectId(val);
+                fetchData(val);
+              }}
+              style={{ width: '100%', background: 'transparent', border: 'none', color: '#f8fafc', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+            >
+              <option value="" style={{ background: '#0f172a', color: '#f8fafc' }}>[ All Projects ]</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id} style={{ background: '#0f172a', color: '#f8fafc' }}>
+                  {p.code}: {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ position: 'relative', flex: '1 1 240px' }}>
             <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
             <input
               type="text"

@@ -5,10 +5,11 @@ import {
   Calendar, Layers, UserCheck, AlertOctagon, Eye, Lock, Filter, Search, Award
 } from 'lucide-react';
 import { hindranceService, projectService, wbsService, documentService } from '../services/api';
+import { getActiveProjectId, setActiveProjectId } from '../utils/activeProject';
 
 export default function HindranceManagement() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialProjectId = searchParams.get('project_id') || '';
+  const initialProjectId = searchParams.get('project_id') || getActiveProjectId() || '';
 
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId);
@@ -90,12 +91,11 @@ export default function HindranceManagement() {
       const list = Array.isArray(res.data) ? res.data : (res.data?.projects || []);
       setProjects(list);
 
-      if (!selectedProjectId && list.length > 0) {
-        // PREFER ACTIVE PROJECT over Closed project
-        const activeProj = list.find(p => !p.status || p.status.toUpperCase() !== 'CLOSED');
-        const defaultProj = activeProj || list[0];
-        setSelectedProjectId(defaultProj.id.toString());
-        setSelectedProject(defaultProj);
+      const activeId = initialProjectId || getActiveProjectId(list);
+      if (activeId) {
+        const proj = list.find(p => String(p.id) === String(activeId)) || list[0];
+        setSelectedProjectId(String(proj.id));
+        setSelectedProject(proj);
       }
     } catch (err) {
       console.error("Failed to load projects:", err);
@@ -383,7 +383,11 @@ export default function HindranceManagement() {
             <label style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.2rem' }}>Select Project</label>
             <select
               value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedProjectId(val);
+                setActiveProjectId(val);
+              }}
               style={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.15)', color: '#f8fafc', padding: '0.5rem 0.85rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 500, minWidth: '220px' }}
             >
               {projects.map(p => (

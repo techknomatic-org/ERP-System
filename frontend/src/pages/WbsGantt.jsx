@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Layers, Plus, Calendar, Clock, CheckCircle2, AlertTriangle, Edit3, Trash2, ArrowLeft, ChevronDown, ChevronRight, CornerDownRight, FolderTree, X, BarChart3, ListFilter, Send } from 'lucide-react';
 import { projectService, wbsService, boqMbService } from '../services/api';
+import { getActiveProjectId, setActiveProjectId } from '../utils/activeProject';
 
 export default function WbsGantt() {
   const [searchParams] = useSearchParams();
@@ -9,7 +10,7 @@ export default function WbsGantt() {
   const urlProjectId = searchParams.get('projectId');
 
   const [projects, setProjects] = useState([]);
-  const [selectedProjectId, setSelectedProjectId] = useState(urlProjectId || '');
+  const [selectedProjectId, setSelectedProjectId] = useState(urlProjectId || getActiveProjectId() || '');
   const [rawTasks, setRawTasks] = useState([]);
   const [projectBoqItems, setProjectBoqItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -64,9 +65,11 @@ export default function WbsGantt() {
   useEffect(() => {
     projectService.getProjects()
       .then((res) => {
-        setProjects(res.data);
-        if (!selectedProjectId && res.data.length > 0) {
-          setSelectedProjectId(res.data[0].id.toString());
+        const prjs = res.data || [];
+        setProjects(prjs);
+        const activeId = urlProjectId || getActiveProjectId(prjs);
+        if (activeId) {
+          setSelectedProjectId(activeId);
         }
       })
       .catch((err) => console.error("Error loading projects:", err));
@@ -581,7 +584,11 @@ export default function WbsGantt() {
             className="form-select" 
             style={{ width: '240px' }}
             value={selectedProjectId}
-            onChange={(e) => setSelectedProjectId(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSelectedProjectId(val);
+              setActiveProjectId(val);
+            }}
           >
             {projects.map(p => (
               <option key={p.id} value={p.id}>{p.code}: {p.name}</option>

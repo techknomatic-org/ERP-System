@@ -325,11 +325,18 @@ def delete_master_data_option(
 
 @router.get("", response_model=List[ProjectResponse])
 @router.get("/", response_model=List[ProjectResponse])
-def list_projects(status: str = None, tenant_name: str = "Default Tenant", db: Session = Depends(get_db)):
+def list_projects(
+    status: str = None, 
+    active_only: bool = True,
+    tenant_name: str = "Default Tenant", 
+    db: Session = Depends(get_db)
+):
     query = db.query(Project)
+    if active_only:
+        query = query.filter(Project.is_active == True)
     if status:
         query = query.filter(func.lower(Project.status) == status.lower())
-    projects = query.order_by(Project.created_at.desc()).all()
+    projects = query.order_by(Project.id.asc()).all()
     for p in projects:
         p.current_phase = derive_project_phase(p, db)
     return projects

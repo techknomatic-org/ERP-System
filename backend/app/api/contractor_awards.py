@@ -46,7 +46,7 @@ def get_ready_projects_for_award(db: Session = Depends(get_db)):
         ).first()
 
         if not active_award:
-            proj = db.query(Project).filter(Project.id == est.project_id).first()
+            proj = db.query(Project).filter(Project.id == est.project_id, Project.is_active == True).first()
             if proj:
                 ready_list.append(ReadyProjectForAward(
                     project_id=proj.id,

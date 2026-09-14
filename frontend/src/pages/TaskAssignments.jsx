@@ -4,6 +4,7 @@ import {
   CheckCircle, Clock, ArrowUpRight, Edit, Trash2, Eye, UserPlus, FileSpreadsheet, XCircle, ChevronRight
 } from 'lucide-react';
 import { taskAssignmentService, projectService, wbsService, userService, projectTeamService } from '../services/api';
+import { getActiveProjectId, setActiveProjectId } from '../utils/activeProject';
 
 const formatRole = (rawRole) => {
   if (!rawRole) return 'Team Member';
@@ -34,7 +35,7 @@ export default function TaskAssignments() {
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState(getActiveProjectId() || '');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
   const [selectedUserFilter, setSelectedUserFilter] = useState('ALL');
   const [selectedPriorityFilter, setSelectedPriorityFilter] = useState('ALL');
@@ -80,8 +81,13 @@ export default function TaskAssignments() {
         projectService.getProjects(),
         userService.getUsers()
       ]);
+      const prjs = projRes.data || [];
       setAssignments(assignRes.data || []);
-      setProjects(projRes.data || []);
+      setProjects(prjs);
+      if (!selectedProjectId) {
+        const activeId = getActiveProjectId(prjs);
+        if (activeId) setSelectedProjectId(activeId);
+      }
 
       // Filter out customer accounts from internal assignment dropdowns
       const eligibleUsers = (userRes.data || []).filter(u => u.role !== 'customer');
@@ -499,7 +505,11 @@ export default function TaskAssignments() {
         <div style={{ flex: '1 1 200px' }}>
           <select
             value={selectedProjectId}
-            onChange={(e) => setSelectedProjectId(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSelectedProjectId(val);
+              setActiveProjectId(val);
+            }}
             style={{ width: '100%', background: '#1e293b', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '6px', padding: '0.5rem 0.75rem', color: '#f8fafc', fontSize: '0.85rem' }}
           >
             <option value="">[ All Projects ]</option>

@@ -5,6 +5,7 @@ import {
   Calendar, Info, RefreshCw, Eye, Edit, Send, Check, ShieldAlert, ArrowDownRight, ArrowUpRight
 } from 'lucide-react';
 import { contractorAwardsService, vendorService, projectService } from '../services/api';
+import { getActiveProjectId, setActiveProjectId } from '../utils/activeProject';
 
 export default function ContractorAwards() {
   const [awards, setAwards] = useState([]);
@@ -18,6 +19,7 @@ export default function ContractorAwards() {
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [selectedProjectId, setSelectedProjectId] = useState(getActiveProjectId() || '');
 
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -41,12 +43,13 @@ export default function ContractorAwards() {
   const [selectedContractorData, setSelectedContractorData] = useState(null);
 
   // Load initial data
-  const fetchData = async () => {
+  const fetchData = async (projId = selectedProjectId) => {
     setLoading(true);
     setError(null);
     try {
+      const awardParams = projId ? { project_id: projId } : {};
       const [awardsRes, readyRes, vendorsRes, projectsRes] = await Promise.all([
-        contractorAwardsService.getAwards(),
+        contractorAwardsService.getAwards(awardParams),
         contractorAwardsService.getReadyProjects(),
         vendorService.getVendors(),
         projectService.getProjects()
@@ -60,6 +63,13 @@ export default function ContractorAwards() {
 
       const projList = Array.isArray(projectsRes.data) ? projectsRes.data : (projectsRes.data?.data || []);
       setAllProjects(projList);
+
+      if (!projId) {
+        const activeId = getActiveProjectId(projList);
+        if (activeId) {
+          setSelectedProjectId(activeId);
+        }
+      }
     } catch (err) {
       console.error("Failed to load contractor awards data:", err);
       setError(err.response?.data?.detail || "Failed to load contractor awards data");
@@ -72,13 +82,30 @@ export default function ContractorAwards() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    const handleActiveProjectChange = (e) => {
+      const newId = e.detail?.projectId;
+      if (newId && String(newId) !== String(selectedProjectId)) {
+        setSelectedProjectId(newId);
+        fetchData(newId);
+      }
+    };
+    window.addEventListener('active_project_changed', handleActiveProjectChange);
+    return () => window.removeEventListener('active_project_changed', handleActiveProjectChange);
+  }, [selectedProjectId]);
+
   // Summary Metrics calculation (from actual DB data)
   const summaryMetrics = useMemo(() => {
-    const readyCount = readyProjects.length;
-    const draftCount = awards.filter(a => a.status === 'DRAFT').length;
-    const pendingCount = awards.filter(a => a.status === 'SUBMITTED').length;
-    const activeCount = awards.filter(a => a.status === 'APPROVED' || a.status === 'AWARDED').length;
-    const totalAwardedValue = awards
+    const relevantAwards = selectedProjectId
+      ? awards.filter(a => String(a.project_id) === String(selectedProjectId))
+      : awards;
+    const readyCount = selectedProjectId
+      ? readyProjects.filter(r => String(r.project_id) === String(selectedProjectId)).length
+      : readyProjects.length;
+    const draftCount = relevantAwards.filter(a => a.status === 'DRAFT').length;
+    const pendingCount = relevantAwards.filter(a => a.status === 'SUBMITTED').length;
+    const activeCount = relevantAwards.filter(a => a.status === 'APPROVED' || a.status === 'AWARDED').length;
+    const totalAwardedValue = relevantAwards
       .filter(a => a.status === 'AWARDED' || a.status === 'APPROVED')
       .reduce((sum, a) => sum + (parseFloat(a.award_amount) || 0), 0);
 
@@ -89,7 +116,7 @@ export default function ContractorAwards() {
       activeCount,
       totalAwardedValue
     };
-  }, [awards, readyProjects]);
+  }, [awards, readyProjects, selectedProjectId]);
 
   // Format currency in INR
   const formatINR = (val) => {
@@ -115,8 +142,10 @@ export default function ContractorAwards() {
   // Open modal for NEW award
   const handleOpenNewModal = () => {
     setEditingAwardId(null);
+    const activeId = getActiveProjectId(allProjects);
+    const matchedReady = readyProjects.find(r => String(r.project_id) === String(activeId)) || (readyProjects.length > 0 ? readyProjects[0] : null);
     setFormData({
-      project_id: readyProjects.length > 0 ? readyProjects[0].project_id.toString() : '',
+      project_id: matchedReady ? matchedReady.project_id.toString() : (activeId || (readyProjects.length > 0 ? readyProjects[0].project_id.toString() : '')),
       contractor_id: '',
       award_amount: '',
       award_date: new Date().toISOString().split('T')[0],
@@ -126,7 +155,9 @@ export default function ContractorAwards() {
     });
     setFormErrors({});
     
-    if (readyProjects.length > 0) {
+    if (matchedReady) {
+      setSelectedProjectData(matchedReady);
+    } else if (readyProjects.length > 0) {
       setSelectedProjectData(readyProjects[0]);
     } else {
       setSelectedProjectData(null);
@@ -172,6 +203,9 @@ export default function ContractorAwards() {
   const handleProjectChange = (e) => {
     const projIdStr = e.target.value;
     setFormData(prev => ({ ...prev, project_id: projIdStr }));
+    if (projIdStr) {
+      setActiveProjectId(projIdStr);
+    }
 
     if (!projIdStr) {
       setSelectedProjectData(null);
@@ -405,9 +439,10 @@ export default function ContractorAwards() {
       );
 
       const matchesStatus = statusFilter === 'ALL' || award.status === statusFilter;
-      return matchesQuery && matchesStatus;
+      const matchesProject = !selectedProjectId || String(award.project_id) === String(selectedProjectId);
+      return matchesQuery && matchesStatus && matchesProject;
     });
-  }, [awards, searchQuery, statusFilter]);
+  }, [awards, searchQuery, statusFilter, selectedProjectId]);
 
   // Helper for Status Badge styling
   const renderStatusBadge = (status) => {
@@ -538,8 +573,29 @@ export default function ContractorAwards() {
 
       {/* Filter and Search Bar */}
       <div style={{ background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '1rem', marginBottom: '1.25rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', flex: 1, minWidth: '280px' }}>
-          <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', flex: 1, minWidth: '320px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#0f172a', padding: '0.4rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', flex: '1 1 240px' }}>
+            <Building2 size={16} style={{ color: '#38bdf8', flexShrink: 0 }} />
+            <select
+              value={selectedProjectId}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedProjectId(val);
+                setActiveProjectId(val);
+                fetchData(val);
+              }}
+              style={{ width: '100%', background: 'transparent', border: 'none', color: '#f8fafc', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+            >
+              <option value="" style={{ background: '#0f172a', color: '#f8fafc' }}>[ All Projects ]</option>
+              {allProjects.map(p => (
+                <option key={p.id} value={p.id} style={{ background: '#0f172a', color: '#f8fafc' }}>
+                  {p.code}: {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ position: 'relative', flex: '1 1 240px' }}>
             <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
             <input
               type="text"

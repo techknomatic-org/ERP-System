@@ -368,6 +368,7 @@ class Project(Base):
     budget = Column(Numeric(14, 2), nullable=True, default=0.00)
     actual_cost = Column(Numeric(14, 2), default=0.00)
     status = Column(String(30), default="DRAFT")
+    is_active = Column(Boolean, default=True)
     progress_pct = Column(Numeric(5, 2), default=0.00)
     created_at = Column(DateTime, default=datetime.utcnow)
 

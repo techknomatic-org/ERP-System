@@ -7,6 +7,7 @@ import {
   Link, DollarSign, Target
 } from 'lucide-react';
 import { workPlanService, projectService, wbsService } from '../services/api';
+import { getActiveProjectId, setActiveProjectId } from '../utils/activeProject';
 
 export default function WorkPlan() {
   const navigate = useNavigate();
@@ -17,7 +18,7 @@ export default function WorkPlan() {
   const [successMsg, setSuccessMsg] = useState(null);
 
   // Filters
-  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState(getActiveProjectId() || '');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [priorityFilter, setPriorityFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -93,6 +94,10 @@ export default function WorkPlan() {
       setWorkPlans(wpRes.data || []);
       const projList = Array.isArray(projRes.data) ? projRes.data : (projRes.data?.projects || []);
       setProjects(projList);
+      if (!selectedProjectId) {
+        const activeId = getActiveProjectId(projList);
+        if (activeId) setSelectedProjectId(activeId);
+      }
     } catch (err) {
       console.error("Failed to load work plan data:", err);
       setError(err.response?.data?.detail || "Failed to load work plan activities.");
@@ -1317,7 +1322,11 @@ export default function WorkPlan() {
           <Building2 size={16} style={{ color: '#38bdf8' }} />
           <select
             value={selectedProjectId}
-            onChange={(e) => setSelectedProjectId(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSelectedProjectId(val);
+              setActiveProjectId(val);
+            }}
             style={{ flex: 1, background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', padding: '0.5rem 0.75rem', color: '#f8fafc', fontSize: '0.85rem' }}
           >
             <option value="">[ All Projects ]</option>

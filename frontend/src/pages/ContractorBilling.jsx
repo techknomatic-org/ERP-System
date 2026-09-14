@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldAlert, Plus, CheckCircle2, AlertTriangle, FileText, Calculator } from 'lucide-react';
+import { ShieldAlert, Plus, CheckCircle2, AlertTriangle, FileText, Calculator, Building2 } from 'lucide-react';
 import { contractorBillingService, boqMbService, vendorService, projectService } from '../services/api';
+import { getActiveProjectId, setActiveProjectId } from '../utils/activeProject';
 
 export default function ContractorBilling() {
   const [bills, setBills] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [selectedProjectId, setSelectedProjectId] = useState(getActiveProjectId() || '');
   const [boqs, setBoqs] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,13 +28,23 @@ export default function ContractorBilling() {
       vendorService.getVendors()
     ])
       .then(([billRes, prjRes, vndRes]) => {
-        setBills(billRes.data);
-        setProjects(prjRes.data);
-        setVendors(vndRes.data);
-        if (prjRes.data.length > 0) {
-          setFormData(f => ({ ...f, project_id: prjRes.data[0].id }));
-          boqMbService.getBoqItems(prjRes.data[0].id)
-            .then(bRes => setBoqs(bRes.data));
+        const prjs = prjRes.data || [];
+        setBills(billRes.data || []);
+        setProjects(prjs);
+        setVendors(vndRes.data || []);
+        
+        const activeId = getActiveProjectId(prjs);
+        if (activeId) {
+          setSelectedProjectId(activeId);
+          setFormData(f => ({ ...f, project_id: activeId }));
+          boqMbService.getBoqItems(parseInt(activeId, 10))
+            .then(bRes => setBoqs(bRes.data || []))
+            .catch(() => {});
+        } else if (prjs.length > 0) {
+          setFormData(f => ({ ...f, project_id: prjs[0].id }));
+          boqMbService.getBoqItems(prjs[0].id)
+            .then(bRes => setBoqs(bRes.data || []))
+            .catch(() => {});
         }
       })
       .catch((err) => console.error("Error loading contractor bills:", err))
@@ -43,10 +55,25 @@ export default function ContractorBilling() {
     loadData();
   }, []);
 
+  const handleProjectFilterChange = (projectId) => {
+    setSelectedProjectId(projectId);
+    if (projectId) {
+      setActiveProjectId(projectId);
+      setFormData(f => ({ ...f, project_id: projectId, boq_item_id: '' }));
+      boqMbService.getBoqItems(parseInt(projectId, 10))
+        .then(bRes => setBoqs(bRes.data || []))
+        .catch(() => {});
+    }
+  };
+
   const handleProjectChange = (projectId) => {
     setFormData(f => ({ ...f, project_id: projectId, boq_item_id: '' }));
+    if (projectId) {
+      setActiveProjectId(projectId);
+    }
     boqMbService.getBoqItems(projectId)
-      .then(bRes => setBoqs(bRes.data));
+      .then(bRes => setBoqs(bRes.data || []))
+      .catch(() => {});
   };
 
   const handleSubmitBill = (e) => {
@@ -66,16 +93,36 @@ export default function ContractorBilling() {
       .catch((err) => alert(err.response?.data?.detail || "Bill verification failed"));
   };
 
+  const filteredBills = selectedProjectId
+    ? bills.filter(b => b.project_id === parseInt(selectedProjectId, 10))
+    : bills;
+
   return (
     <div className="content-page">
-      <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 className="page-title">Contractor Billing & 3-Way Match Engine</h1>
           <p className="page-subtitle">Automated 3-Way Verification: BOQ Quantity ↔ MB Quantity ↔ Contractor Bill Quantity</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          <Plus size={18} /> Submit Contractor Bill
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Building2 size={16} color="#38bdf8" />
+            <select
+              className="form-control"
+              style={{ width: '260px', fontWeight: 600 }}
+              value={selectedProjectId}
+              onChange={(e) => handleProjectFilterChange(e.target.value)}
+            >
+              <option value="">[ All Projects ]</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.code}: {p.name}</option>
+              ))}
+            </select>
+          </div>
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+            <Plus size={18} /> Submit Contractor Bill
+          </button>
+        </div>
       </div>
 
       {/* Discrepancy Rule Banner */}
@@ -106,14 +153,14 @@ export default function ContractorBilling() {
             </tr>
           </thead>
           <tbody>
-            {bills.length === 0 ? (
+            {filteredBills.length === 0 ? (
               <tr>
                 <td colSpan="7" style={{ textAlign: 'center', color: '#64748b', padding: '2.5rem' }}>
-                  {loading ? "Loading contractor bills..." : "No contractor bills submitted."}
+                  {loading ? "Loading contractor bills..." : "No contractor bills submitted for this project."}
                 </td>
               </tr>
             ) : (
-              bills.map((b) => (
+              filteredBills.map((b) => (
                 <tr key={b.id}>
                   <td style={{ fontWeight: 600, color: '#818cf8' }}>{b.bill_number}</td>
                   <td>{b.boq_qty} units</td>

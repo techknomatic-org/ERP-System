@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import List
+from typing import List, Optional
 import uuid
 from datetime import datetime
 from app.database import get_db
@@ -11,8 +11,11 @@ from app.schemas import ContractorBillCreate, ContractorBillResponse
 router = APIRouter(prefix="/api/contractor-billing", tags=["3-Way Contractor Bill Verification Engine"])
 
 @router.get("/bills", response_model=List[ContractorBillResponse])
-def list_contractor_bills(db: Session = Depends(get_db)):
-    return db.query(ContractorBill).order_by(ContractorBill.created_at.desc()).all()
+def list_contractor_bills(project_id: Optional[int] = None, db: Session = Depends(get_db)):
+    query = db.query(ContractorBill)
+    if project_id is not None:
+        query = query.filter(ContractorBill.project_id == project_id)
+    return query.order_by(ContractorBill.created_at.desc()).all()
 
 @router.post("/bills", response_model=ContractorBillResponse)
 def submit_contractor_bill(bill_in: ContractorBillCreate, db: Session = Depends(get_db)):

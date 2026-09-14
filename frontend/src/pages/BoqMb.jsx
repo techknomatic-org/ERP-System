@@ -6,6 +6,7 @@ import {
   ShieldCheck, Check, Clock, AlertTriangle, Camera, UploadCloud, RotateCcw
 } from 'lucide-react';
 import { boqMbService, projectService, vendorService } from '../services/api';
+import { getActiveProjectId, setActiveProjectId } from '../utils/activeProject';
 
 export default function BoqMb() {
   const [searchParams] = useSearchParams();
@@ -17,7 +18,7 @@ export default function BoqMb() {
   const initialTab = (location.pathname === '/test-check' || urlTab === 'test_check') ? 'test_check' : (urlTab === 'boq' ? 'boq' : 'emb');
   const [activeTab, setActiveTab] = useState(initialTab);
   const [projects, setProjects] = useState([]);
-  const [selectedProjectId, setSelectedProjectId] = useState(urlProjectId || '');
+  const [selectedProjectId, setSelectedProjectId] = useState(urlProjectId || getActiveProjectId() || '');
   const [boqs, setBoqs] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [wbsData, setWbsData] = useState({ phases: [], tasks: [], subtasks: [] });
@@ -163,9 +164,11 @@ export default function BoqMb() {
   useEffect(() => {
     projectService.getProjects()
       .then((res) => {
-        setProjects(res.data || []);
-        if (!selectedProjectId && res.data && res.data.length > 0) {
-          setSelectedProjectId(res.data[0].id.toString());
+        const prjs = res.data || [];
+        setProjects(prjs);
+        const activeId = urlProjectId || getActiveProjectId(prjs);
+        if (activeId) {
+          setSelectedProjectId(activeId);
         }
       })
       .catch((err) => console.error("Error loading projects:", err));
@@ -597,7 +600,11 @@ export default function BoqMb() {
             className="form-control" 
             style={{ width: '280px', fontWeight: 600 }} 
             value={selectedProjectId} 
-            onChange={e => setSelectedProjectId(e.target.value)}
+            onChange={e => {
+              const val = e.target.value;
+              setSelectedProjectId(val);
+              setActiveProjectId(val);
+            }}
           >
             {projects.map(p => (
               <option key={p.id} value={p.id}>{p.code}: {p.name}</option>

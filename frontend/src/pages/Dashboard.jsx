@@ -10,6 +10,7 @@ import {
 import KpiCard from '../components/KpiCard';
 import ProjectHealthBadge from '../components/ProjectHealthBadge';
 import { dashboardService, projectService, propertyService, auditService, authService } from '../services/api';
+import { getActiveProjectId, setActiveProjectId } from '../utils/activeProject';
 
 const DASHBOARD_POLLING_INTERVAL_MS = 60000;
 const RETRY_INTERVAL_MS = 10000;
@@ -21,7 +22,7 @@ export default function Dashboard() {
 
   // Multi-Project Context State
   const [projects, setProjects] = useState([]);
-  const [selectedProjectId, setSelectedProjectId] = useState(localStorage.getItem('active_project_id') || '');
+  const [selectedProjectId, setSelectedProjectId] = useState(getActiveProjectId() || '');
   const [projectsLoading, setProjectsLoading] = useState(true);
   
   // Date Range Filter State ('this_week' | 'this_month' | 'full_contract')
@@ -216,19 +217,9 @@ export default function Dashboard() {
       setProjects(projectList);
 
       if (projectList.length > 0) {
-        const storedProjId = localStorage.getItem('active_project_id');
-        const exists = projectList.some(p => String(p.id) === String(storedProjId));
-        
-        let initialId = '';
-        if (storedProjId && exists) {
-          initialId = String(storedProjId);
-        } else {
-          const activeProj = projectList.find(p => p.is_default) || projectList.find(p => ['ACTIVE', 'IN_PROGRESS'].includes((p.status || '').toUpperCase())) || projectList[0];
-          initialId = String(activeProj.id);
-        }
-
+        const initialId = getActiveProjectId(projectList);
         setSelectedProjectId(initialId);
-        localStorage.setItem('active_project_id', initialId);
+        setActiveProjectId(initialId);
         loadAllWidgets(initialId, dateRange);
         return initialId;
       } else {
@@ -305,10 +296,23 @@ export default function Dashboard() {
     return () => clearTimeout(retryTimer);
   }, [selectedProjectId, dateRange, actionQueue.error, scheduleSnapshot.error, costSnapshot.error, approvalsPending.error, loadActionQueue, loadScheduleSnapshot, loadCostSnapshot, loadApprovalsPending]);
 
+  // Synchronize with global active project context events
+  useEffect(() => {
+    const handleActiveProjectChange = (e) => {
+      const newId = e.detail?.projectId;
+      if (newId && String(newId) !== String(selectedProjectId)) {
+        setSelectedProjectId(newId);
+        loadAllWidgets(newId, dateRange);
+      }
+    };
+    window.addEventListener('active_project_changed', handleActiveProjectChange);
+    return () => window.removeEventListener('active_project_changed', handleActiveProjectChange);
+  }, [selectedProjectId, dateRange, loadAllWidgets]);
+
   // Project Change Event Handler
   const handleProjectSwitch = (newProjectId) => {
     setSelectedProjectId(newProjectId);
-    localStorage.setItem('active_project_id', newProjectId);
+    setActiveProjectId(newProjectId);
     loadAllWidgets(newProjectId, dateRange);
   };
 
